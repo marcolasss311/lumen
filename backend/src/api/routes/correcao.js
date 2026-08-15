@@ -34,12 +34,19 @@ Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
 }`;
 
         const interaction = await ai.interactions.create({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.6-flash',
             input: prompt
         });
 
-        const cleanText = interaction.output_text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const correcaoIA = JSON.parse(cleanText);
+        let correcaoIA;
+        try {
+            const match = interaction.output_text.match(/\{[\s\S]*\}/);
+            const cleanText = match ? match[0] : interaction.output_text.trim();
+            correcaoIA = JSON.parse(cleanText);
+        } catch (err) {
+            console.error("Falha ao fazer parse do JSON da IA:", interaction.output_text);
+            return res.status(500).json({ error: 'Erro ao interpretar resposta da IA.' });
+        }
 
         // 3. Salvar no historico_respostas
         await db.query(

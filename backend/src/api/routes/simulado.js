@@ -76,13 +76,20 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
             }
 
             const interaction = await ai.interactions.create({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3.6-flash',
                 input: prompt
             });
 
             // Limpando possível formatação markdown antes de fazer o parse
-            const cleanText = interaction.output_text.replace(/```json/g, '').replace(/```/g, '').trim();
-            const questoesIA = JSON.parse(cleanText);
+            let questoesIA;
+            try {
+                const match = interaction.output_text.match(/\[[\s\S]*\]/);
+                const cleanText = match ? match[0] : interaction.output_text.trim();
+                questoesIA = JSON.parse(cleanText);
+            } catch (err) {
+                console.error("Falha ao fazer parse do JSON do simulado:", interaction.output_text);
+                throw new Error("Erro de formatação da IA");
+            }
             
             // Inserir as geradas no banco de dados para ter UUID válido e Foreign Key
             const idsGerados = [];
