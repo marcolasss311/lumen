@@ -33,15 +33,15 @@ Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
   "feedback_detalhado": "Sua explicação pedagógica detalhada do que o aluno acertou e onde errou."
 }`;
 
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
+        const interaction = await ai.interactions.create({
+            model: 'gemini-3.6-flash',
+            input: prompt,
             config: {
                 responseMimeType: "application/json",
             }
         });
 
-        const correcaoIA = JSON.parse(response.text);
+        const correcaoIA = JSON.parse(interaction.output_text);
 
         // 3. Salvar no historico_respostas
         await db.query(

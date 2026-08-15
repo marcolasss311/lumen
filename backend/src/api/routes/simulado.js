@@ -49,16 +49,16 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 ]`;
             }
 
-            // Chamada ao Gemini para gerar JSON estruturado
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
+            // Chamada ao Gemini usando a Interactions API
+            const interaction = await ai.interactions.create({
+                model: 'gemini-3.6-flash',
+                input: prompt,
                 config: {
                     responseMimeType: "application/json",
                 }
             });
 
-            const questoesIA = JSON.parse(response.text);
+            const questoesIA = JSON.parse(interaction.output_text);
             
             // Formatando para o mesmo padrão do banco e mesclando
             const formatadasIA = questoesIA.map(q => ({
