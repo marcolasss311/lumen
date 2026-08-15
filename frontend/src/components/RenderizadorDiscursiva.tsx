@@ -22,8 +22,10 @@ export default function RenderizadorDiscursiva({ questao, index, modo, respostaS
         <span className="font-semibold text-blue-600 dark:text-blue-400">Questão {index} (Discursiva)</span>
         <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">{questao.origem}</span>
       </div>
-      
-      <p className="text-gray-800 dark:text-gray-200 mb-6 font-medium whitespace-pre-wrap">{questao.pergunta}</p>
+      <p className="text-gray-800 dark:text-gray-200 mb-6 font-medium whitespace-pre-wrap">
+        {questao.origem && questao.origem !== 'IA' && questao.origem !== 'Feedback' ? `(${questao.origem}) ` : ''}
+        {questao.pergunta}
+      </p>
 
       {!isFeedback ? (
         <div className="space-y-4">

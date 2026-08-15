@@ -102,6 +102,7 @@ export default function Dashboard() {
   };
 
   const finalizarSimulado = async () => {
+    if (!user) return;
     if (Object.keys(respostas).length < questoes.length) {
       return alert("Responda todas as questões antes de finalizar!");
     }

@@ -6,9 +6,10 @@ interface Props {
   modo: 'prova' | 'feedback';
   respostaSelecionada: string | null;
   onResponder: (resp: string) => void;
+  feedback?: any;
 }
 
-export default function RenderizadorSimulado({ questao, index, modo, respostaSelecionada, onResponder }: Props) {
+export default function RenderizadorSimulado({ questao, index, modo, respostaSelecionada, onResponder, feedback }: Props) {
   const alternativas = typeof questao.alternativas === 'string' 
     ? JSON.parse(questao.alternativas) 
     : questao.alternativas;
@@ -21,8 +22,10 @@ export default function RenderizadorSimulado({ questao, index, modo, respostaSel
         <span className="font-semibold text-blue-600 dark:text-blue-400">Questão {index}</span>
         <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">{questao.origem}</span>
       </div>
-      
-      <p className="text-gray-800 dark:text-gray-200 mb-6 font-medium whitespace-pre-wrap">{questao.pergunta}</p>
+      <p className="text-gray-800 dark:text-gray-200 mb-6 font-medium whitespace-pre-wrap">
+        {questao.origem && questao.origem !== 'IA' && questao.origem !== 'Feedback' ? `(${questao.origem}) ` : ''}
+        {questao.pergunta}
+      </p>
 
       <div className="space-y-3">
         {alternativas?.map((alt: any, i: number) => {
