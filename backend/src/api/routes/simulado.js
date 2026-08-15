@@ -51,7 +51,7 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 
             // Chamada ao Gemini para gerar JSON estruturado
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-pro',
+                model: 'gemini-2.5-flash',
                 contents: prompt,
                 config: {
                     responseMimeType: "application/json",
