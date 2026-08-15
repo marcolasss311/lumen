@@ -17,10 +17,10 @@ const authMiddleware = async (req, res, next) => {
 
         // Garante que o usuário existe no banco relacional antes de qualquer requisição avançar
         await db.query(
-            `INSERT INTO usuarios (firebase_uid, email, nome) 
-             VALUES ($1, $2, $3) 
+            `INSERT INTO usuarios (firebase_uid, email, nome, ano_escolar_atual) 
+             VALUES ($1, $2, $3, $4) 
              ON CONFLICT (firebase_uid) DO NOTHING`,
-            [decodedToken.uid, decodedToken.email || null, decodedToken.name || 'Usuário Lumen']
+            [decodedToken.uid, decodedToken.email || null, decodedToken.name || 'Usuário Lumen', 'Não Informado']
         );
 
         next();
