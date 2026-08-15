@@ -29,7 +29,7 @@ export const SimuladoParaImprimir = React.forwardRef<HTMLDivElement, Props>(({ q
             ) : (
               q.alternativas && (
                 <div className="space-y-2 mt-4 ml-4">
-                  {JSON.parse(q.alternativas).map((alt: any) => (
+                  {(typeof q.alternativas === 'string' ? JSON.parse(q.alternativas) : q.alternativas).map((alt: any) => (
                     <div key={alt.letra} className="flex gap-3">
                       <div className="w-6 h-6 border border-black rounded-full flex items-center justify-center font-bold shrink-0">
                         {alt.letra}

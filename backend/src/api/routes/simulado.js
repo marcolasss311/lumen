@@ -75,9 +75,8 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
 ]`;
             }
 
-            // Chamada ao Gemini usando a Interactions API
             const interaction = await ai.interactions.create({
-                model: 'gemini-3.6-flash',
+                model: 'gemini-2.5-flash',
                 input: prompt
             });
 

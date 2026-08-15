@@ -127,7 +127,7 @@ export default function Dashboard() {
           
           <div>
             <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Nível Escolar</label>
-            <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-transparent" value={anoEscolar} onChange={e => setAnoEscolar(e.target.value)}>
+            <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800" value={anoEscolar} onChange={e => setAnoEscolar(e.target.value)}>
               <option>8º Ano</option>
               <option>9º Ano</option>
               <option>1º Ano EM</option>
@@ -155,7 +155,7 @@ export default function Dashboard() {
             </div>
 
             {modoMateria === "Única" ? (
-              <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-transparent" value={materiaUnica} onChange={e => setMateriaUnica(e.target.value)}>
+              <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800" value={materiaUnica} onChange={e => setMateriaUnica(e.target.value)}>
                 <option>Matemática</option>
                 <option>Português</option>
                 <option>História</option>
@@ -192,7 +192,7 @@ export default function Dashboard() {
             <div className="flex gap-2 mb-2">
               <input 
                 type="text" 
-                className="flex-1 border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-transparent text-sm" 
+                className="flex-1 border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 text-sm" 
                 value={novoTopico} 
                 onChange={e => setNovoTopico(e.target.value)} 
                 placeholder="Ex: Frações..."
@@ -242,7 +242,7 @@ export default function Dashboard() {
 
           <div>
             <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Tipo de Questão</label>
-            <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-transparent" value={tipoQuestao} onChange={e => setTipoQuestao(e.target.value)}>
+            <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800" value={tipoQuestao} onChange={e => setTipoQuestao(e.target.value)}>
               <option value="Fechada">Múltipla Escolha</option>
               <option value="Aberta">Discursiva (Aberta)</option>
               <option value="Mesclada">Mesclada (Múltipla + Discursiva)</option>
