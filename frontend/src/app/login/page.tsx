@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithPopup, signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 
@@ -9,6 +9,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
 
   const handleGoogleLogin = async () => {
@@ -20,13 +21,18 @@ export default function Login() {
     }
   };
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      if (isRegistering) {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message || "Erro ao fazer login com Email/Senha");
+      setError(err.message || "Erro na autenticação");
     }
   };
 
@@ -38,7 +44,7 @@ export default function Login() {
         
         {error && <div className="p-3 text-sm text-red-600 bg-red-100 rounded-md">{error}</div>}
 
-        <form onSubmit={handleEmailLogin} className="space-y-4">
+        <form onSubmit={handleEmailAuth} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Email</label>
             <input 
@@ -59,10 +65,20 @@ export default function Login() {
               required 
             />
           </div>
-          <button type="submit" className="w-full py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700">
-            Entrar com Email
+          <button type="submit" className="w-full py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors">
+            {isRegistering ? "Criar Conta" : "Entrar com Email"}
           </button>
         </form>
+
+        <div className="text-center text-sm">
+          <button 
+            type="button" 
+            onClick={() => setIsRegistering(!isRegistering)}
+            className="text-blue-600 hover:underline"
+          >
+            {isRegistering ? "Já tem uma conta? Faça login" : "Ainda não tem conta? Crie agora"}
+          </button>
+        </div>
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">

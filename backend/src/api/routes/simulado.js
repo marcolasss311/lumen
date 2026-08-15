@@ -11,13 +11,23 @@ router.post('/gerar', authMiddleware, async (req, res) => {
     try {
         const { materia, topico, ano_escolar, quantidade = 5, foco = 'ENEM', tipo_questao = 'Fechada' } = req.body;
 
-        // 1. Buscar no PostgreSQL questões reais
-        const dbResult = await db.query(
-            `SELECT * FROM questoes 
-             WHERE materia = $1 AND topico = $2 AND ano_escolar_alvo = $3 AND tipo_questao = $4
-             LIMIT $5`,
-            [materia, topico, ano_escolar, tipo_questao, quantidade]
-        );
+        let dbResult;
+        if (tipo_questao === 'Mesclada') {
+             // Busca qualquer tipo
+             dbResult = await db.query(
+                `SELECT * FROM questoes 
+                 WHERE materia = $1 AND topico = $2 AND ano_escolar_alvo = $3
+                 LIMIT $4`,
+                [materia, topico, ano_escolar, quantidade]
+            );
+        } else {
+            dbResult = await db.query(
+                `SELECT * FROM questoes 
+                 WHERE materia = $1 AND topico = $2 AND ano_escolar_alvo = $3 AND tipo_questao = $4
+                 LIMIT $5`,
+                [materia, topico, ano_escolar, tipo_questao, quantidade]
+            );
+        }
 
         let questoes = dbResult.rows;
 
@@ -27,7 +37,7 @@ router.post('/gerar', authMiddleware, async (req, res) => {
             
             let prompt = "";
             if (tipo_questao === 'Fechada') {
-                prompt = `Gere ${questoesFaltantes} questões de múltipla escolha sobre o tópico "${topico}" da matéria "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+                prompt = `Gere ${questoesFaltantes} questões de múltipla escolha sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
   {
@@ -38,13 +48,29 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
     ]
   }
 ]`;
-            } else {
-                prompt = `Gere ${questoesFaltantes} questões discursivas (abertas) sobre o tópico "${topico}" da matéria "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+            } else if (tipo_questao === 'Aberta') {
+                prompt = `Gere ${questoesFaltantes} questões discursivas (abertas) sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
   {
     "pergunta": "Texto da pergunta dissertativa",
     "gabarito": "Padrão de resposta detalhado esperado do aluno (será usado posteriormente para corrigir)."
+  }
+]`;
+            } else {
+                prompt = `Gere ${questoesFaltantes} questões mistas sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+Metade deve ser de múltipla escolha e a outra metade discursiva.
+Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao" ("Fechada" ou "Aberta"):
+[
+  {
+    "tipo_questao": "Fechada",
+    "pergunta": "Texto da pergunta",
+    "alternativas": [ { "letra": "A", "texto": "...", "correta": true, "explicacao": null } ]
+  },
+  {
+    "tipo_questao": "Aberta",
+    "pergunta": "Texto da pergunta dissertativa",
+    "gabarito": "Resposta esperada"
   }
 ]`;
             }
@@ -59,20 +85,22 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
             const cleanText = interaction.output_text.replace(/```json/g, '').replace(/```/g, '').trim();
             const questoesIA = JSON.parse(cleanText);
             
-            // Formatando para o mesmo padrão do banco e mesclando
-            const formatadasIA = questoesIA.map(q => ({
-                id: 'gerada-ia-' + Math.random().toString(36).substr(2, 9),
-                origem: 'IA',
-                materia,
-                topico,
-                ano_escolar_alvo: ano_escolar,
-                tipo_questao: tipo_questao,
-                pergunta: q.pergunta,
-                alternativas: q.alternativas ? JSON.stringify(q.alternativas) : null,
-                gabarito: q.gabarito || null
-            }));
+            // Inserir as geradas no banco de dados para ter UUID válido e Foreign Key
+            const idsGerados = [];
+            for (const q of questoesIA) {
+                const tipoReal = q.tipo_questao || tipo_questao;
+                const alts = q.alternativas ? JSON.stringify(q.alternativas) : null;
+                const gab = q.gabarito || null;
+                
+                const insertRes = await db.query(
+                    `INSERT INTO questoes (materia, topico, ano_escolar_alvo, tipo_questao, pergunta, alternativas, gabarito, origem)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+                    [materia, topico, ano_escolar, tipoReal, q.pergunta, alts, gab, 'IA']
+                );
+                idsGerados.push(insertRes.rows[0]);
+            }
 
-            questoes = [...questoes, ...formatadasIA];
+            questoes = [...questoes, ...idsGerados];
         }
 
         return res.json({ questoes });

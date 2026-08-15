@@ -4,6 +4,7 @@ require('dotenv').config();
 
 const simuladoRoutes = require('./api/routes/simulado');
 const correcaoRoutes = require('./api/routes/correcao');
+const desempenhoRoutes = require('./api/routes/desempenho');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -14,6 +15,7 @@ app.use(express.json());
 // Rotas
 app.use('/api/simulado', simuladoRoutes);
 app.use('/api/correcao', correcaoRoutes);
+app.use('/api/desempenho', desempenhoRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
