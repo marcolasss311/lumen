@@ -26,8 +26,17 @@ export default function Dashboard() {
   const [novoTopico, setNovoTopico] = useState("");
   const [quantidade, setQuantidade] = useState(5);
   const [tipoQuestao, setTipoQuestao] = useState("Mesclada");
+  const [priorizarOficiais, setPriorizarOficiais] = useState(true);
+
+  // Estados do Simulado
   const [questoes, setQuestoes] = useState<any[]>([]);
   const [gerando, setGerando] = useState(false);
+  const [respostas, setRespostas] = useState<{ [id: string]: string }>({});
+  const [resultados, setResultados] = useState<any[] | null>(null);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [simuladoFinalizado, setSimuladoFinalizado] = useState(false);
+  const [finalizando, setFinalizando] = useState(false);
+  const [notaGeral, setNotaGeral] = useState<number | null>(null);
   
   const [showEmail, setShowEmail] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -61,6 +70,12 @@ export default function Dashboard() {
     }
 
     setGerando(true);
+    setRespostas({});
+    setResultados(null);
+    setPaginaAtual(1);
+    setSimuladoFinalizado(false);
+    setNotaGeral(null);
+
     try {
       const token = await user.getIdToken();
       const payload = {
@@ -68,7 +83,8 @@ export default function Dashboard() {
         materia: modoMateria === "Única" ? materiaUnica : materiasMultiplas.join(", "),
         topico: topicos.length > 0 ? topicos.join(", ") : "Geral",
         quantidade: quantidade,
-        tipo_questao: tipoQuestao
+        tipo_questao: tipoQuestao,
+        priorizar_oficiais: priorizarOficiais
       };
 
       const res = await axios.post(
@@ -84,6 +100,65 @@ export default function Dashboard() {
       setGerando(false);
     }
   };
+
+  const finalizarSimulado = async () => {
+    if (Object.keys(respostas).length < questoes.length) {
+      return alert("Responda todas as questões antes de finalizar!");
+    }
+    setFinalizando(true);
+    try {
+      const token = await user.getIdToken();
+      
+      const payloadRespostas = questoes.map(q => {
+        const resp = respostas[q.id];
+        if (q.tipo_questao === 'Fechada') {
+          const alts = typeof q.alternativas === 'string' ? JSON.parse(q.alternativas) : q.alternativas;
+          const escolhida = alts.find((a: any) => a.letra === resp);
+          return {
+            questao_id: q.id,
+            tipo: 'Fechada',
+            alternativa_selecionada: resp,
+            acertou: escolhida?.correta || false,
+            explicacao: escolhida?.explicacao || null
+          };
+        } else {
+          return {
+            questao_id: q.id,
+            tipo: 'Aberta',
+            resposta_aluno: resp,
+            pergunta: q.pergunta,
+            gabarito: q.gabarito
+          };
+        }
+      });
+
+      const payload = {
+        nome_simulado: `Simulado de ${modoMateria === 'Única' ? materiaUnica : 'Múltiplas'} - ${new Date().toLocaleDateString()}`,
+        respostas: payloadRespostas
+      };
+
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/simulado/finalizar`,
+        payload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setResultados(res.data.resultados);
+      setNotaGeral(res.data.nota_geral);
+      setSimuladoFinalizado(true);
+      setPaginaAtual(1); // Volta pra 1 pra ver os feedbacks
+
+    } catch (error) {
+      console.error("Erro ao finalizar simulado", error);
+      alert("Erro ao conectar com a IA de correção.");
+    } finally {
+      setFinalizando(false);
+    }
+  };
+
+  const itensPorPagina = 3;
+  const totalPaginas = Math.ceil(questoes.length / itensPorPagina);
+  const paginatedQuestoes = questoes.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
   if (loading) return <div className="p-8 text-black">Carregando...</div>;
   if (!user) return null;
@@ -242,11 +317,21 @@ export default function Dashboard() {
 
           <div>
             <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Tipo de Questão</label>
-            <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800" value={tipoQuestao} onChange={e => setTipoQuestao(e.target.value)}>
+            <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 mb-3" value={tipoQuestao} onChange={e => setTipoQuestao(e.target.value)}>
               <option value="Fechada">Múltipla Escolha</option>
               <option value="Aberta">Discursiva (Aberta)</option>
               <option value="Mesclada">Mesclada (Múltipla + Discursiva)</option>
             </select>
+            
+            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input 
+                type="checkbox" 
+                checked={priorizarOficiais}
+                onChange={e => setPriorizarOficiais(e.target.checked)}
+                className="rounded text-blue-600"
+              />
+              Priorizar Questões Oficiais (Provas)
+            </label>
           </div>
 
           <button 
@@ -272,13 +357,77 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              {questoes.map((q, idx) => (
-                q.tipo_questao === 'Aberta' ? (
-                  <RenderizadorDiscursiva key={idx} questao={q} index={idx + 1} />
+              {simuladoFinalizado && notaGeral !== null && (
+                <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-xl flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-bold text-blue-800 dark:text-blue-300">Simulado Finalizado!</h2>
+                    <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">Veja seus erros e acertos abaixo.</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-3xl font-black text-blue-700 dark:text-blue-400">{notaGeral.toFixed(0)}<span className="text-lg">/100</span></div>
+                    <div className="text-xs text-blue-600 dark:text-blue-500 uppercase tracking-wider font-bold">Nota Geral</div>
+                  </div>
+                </div>
+              )}
+
+              {paginatedQuestoes.map((q, idx) => {
+                const globalIndex = (paginaAtual - 1) * itensPorPagina + idx + 1;
+                const feedback = resultados?.find(r => r.questao_id === q.id);
+
+                return q.tipo_questao === 'Aberta' ? (
+                  <RenderizadorDiscursiva 
+                    key={q.id} 
+                    questao={q} 
+                    index={globalIndex} 
+                    modo={simuladoFinalizado ? 'feedback' : 'prova'}
+                    respostaSelecionada={respostas[q.id] || null}
+                    onResponder={(resp) => setRespostas({ ...respostas, [q.id]: resp })}
+                    feedback={feedback}
+                  />
                 ) : (
-                  <RenderizadorSimulado key={idx} questao={q} index={idx + 1} />
+                  <RenderizadorSimulado 
+                    key={q.id} 
+                    questao={q} 
+                    index={globalIndex} 
+                    modo={simuladoFinalizado ? 'feedback' : 'prova'}
+                    respostaSelecionada={respostas[q.id] || null}
+                    onResponder={(resp) => setRespostas({ ...respostas, [q.id]: resp })}
+                    feedback={feedback}
+                  />
                 )
-              ))}
+              })}
+
+              <div className="flex justify-between items-center mt-6 pt-6 border-t dark:border-gray-700">
+                <button 
+                  onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
+                  disabled={paginaAtual === 1}
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg disabled:opacity-50 text-black dark:text-white font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Anterior
+                </button>
+                <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">
+                  Página {paginaAtual} de {totalPaginas}
+                </span>
+                
+                {paginaAtual < totalPaginas ? (
+                  <button 
+                    onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
+                    className="px-4 py-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-700 dark:text-blue-300 font-medium hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                  >
+                    Próxima
+                  </button>
+                ) : !simuladoFinalizado ? (
+                  <button 
+                    onClick={finalizarSimulado}
+                    disabled={finalizando || Object.keys(respostas).length < questoes.length}
+                    className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
+                  >
+                    {finalizando ? "Corrigindo IA..." : "Finalizar Simulado"}
+                  </button>
+                ) : (
+                  <div className="text-green-600 dark:text-green-400 font-bold">✓ Concluído</div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="bg-white dark:bg-gray-800 p-12 text-center rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400">

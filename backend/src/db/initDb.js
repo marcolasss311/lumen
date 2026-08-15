@@ -34,9 +34,21 @@ const init = async () => {
         `);
 
         await db.query(`
+            CREATE TABLE IF NOT EXISTS simulados_realizados (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                firebase_uid VARCHAR(128) NOT NULL,
+                nome VARCHAR(255) NOT NULL,
+                nota_geral NUMERIC(5,2),
+                data_realizacao TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_simulado_usuario FOREIGN KEY (firebase_uid) REFERENCES usuarios(firebase_uid) ON DELETE CASCADE
+            );
+        `);
+
+        await db.query(`
             CREATE TABLE IF NOT EXISTS historico_respostas (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 firebase_uid VARCHAR(128) NOT NULL,
+                simulado_id UUID,
                 questao_id UUID NOT NULL,
                 acertou BOOLEAN,
                 nota NUMERIC(5,2),
@@ -44,6 +56,7 @@ const init = async () => {
                 feedback_ia TEXT,
                 data_resposta TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT fk_historico_usuario FOREIGN KEY (firebase_uid) REFERENCES usuarios(firebase_uid) ON DELETE CASCADE,
+                CONSTRAINT fk_historico_simulado FOREIGN KEY (simulado_id) REFERENCES simulados_realizados(id) ON DELETE CASCADE,
                 CONSTRAINT fk_historico_questao FOREIGN KEY (questao_id) REFERENCES questoes(id) ON DELETE CASCADE
             );
         `);

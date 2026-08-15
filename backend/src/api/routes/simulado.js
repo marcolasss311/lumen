@@ -9,7 +9,9 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 // POST /api/simulado/gerar
 router.post('/gerar', authMiddleware, async (req, res) => {
     try {
-        const { materia, topico, ano_escolar, quantidade = 5, foco = 'ENEM', tipo_questao = 'Fechada' } = req.body;
+        const { materia, topico, ano_escolar, quantidade = 5, foco = 'ENEM', tipo_questao = 'Fechada', priorizar_oficiais = false } = req.body;
+
+        let orderByClause = priorizar_oficiais ? `ORDER BY CASE WHEN origem != 'IA' THEN 0 ELSE 1 END, RANDOM()` : `ORDER BY RANDOM()`;
 
         let dbResult;
         if (tipo_questao === 'Mesclada') {
@@ -17,13 +19,15 @@ router.post('/gerar', authMiddleware, async (req, res) => {
              dbResult = await db.query(
                 `SELECT * FROM questoes 
                  WHERE materia = $1 AND topico = $2 AND ano_escolar_alvo = $3
+                 ${orderByClause}
                  LIMIT $4`,
                 [materia, topico, ano_escolar, quantidade]
             );
         } else {
-            dbResult = await db.query(
+             dbResult = await db.query(
                 `SELECT * FROM questoes 
                  WHERE materia = $1 AND topico = $2 AND ano_escolar_alvo = $3 AND tipo_questao = $4
+                 ${orderByClause}
                  LIMIT $5`,
                 [materia, topico, ano_escolar, tipo_questao, quantidade]
             );
@@ -117,30 +121,99 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
     }
 });
 
-// POST /api/simulado/responder
-router.post('/responder', authMiddleware, async (req, res) => {
+// POST /api/simulado/finalizar
+router.post('/finalizar', authMiddleware, async (req, res) => {
     try {
-        const { questao_id, alternativa_selecionada, acertou } = req.body;
+        const { nome_simulado, respostas } = req.body;
         const firebase_uid = req.user.uid;
 
-        // Salvar no historico_respostas
-        await db.query(
-            `INSERT INTO historico_respostas 
-             (firebase_uid, questao_id, acertou, resposta_aluno) 
-             VALUES ($1, $2, $3, $4)`,
-            [
-                firebase_uid, 
-                questao_id, 
-                acertou, 
-                alternativa_selecionada
-            ]
+        // 1. Criar o registro do simulado
+        const simRes = await db.query(
+            `INSERT INTO simulados_realizados (firebase_uid, nome) VALUES ($1, $2) RETURNING id`,
+            [firebase_uid, nome_simulado || 'Simulado Geral']
         );
+        const simulado_id = simRes.rows[0].id;
 
-        return res.json({ success: true });
+        let somaNotas = 0;
+        const resultadosProcessados = [];
+
+        // 2. Corrigir em lote
+        const correctionPromises = respostas.map(async (resp) => {
+            let acertou = null;
+            let nota = 0;
+            let feedback_ia = null;
+
+            if (resp.tipo === 'Fechada') {
+                acertou = resp.acertou;
+                nota = acertou ? 100 : 0;
+                feedback_ia = resp.explicacao || null;
+            } else if (resp.tipo === 'Aberta') {
+                // Chama a IA para corrigir
+                const prompt = `Atue como um corretor rigoroso. 
+Pergunta original: ${resp.pergunta}
+Padrão de resposta esperado: ${resp.gabarito}
+Resposta do aluno: "${resp.resposta_aluno}"
+
+Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
+{
+  "nota": <numero de 0 a 100>,
+  "feedback_detalhado": "Sua explicação pedagógica detalhada do que o aluno acertou e onde errou."
+}`;
+                try {
+                    const interaction = await ai.interactions.create({
+                        model: 'gemini-3.6-flash',
+                        input: prompt
+                    });
+                    const match = interaction.output_text.match(/\{[\s\S]*\}/);
+                    const cleanText = match ? match[0] : interaction.output_text.trim();
+                    const correcaoIA = JSON.parse(cleanText);
+                    nota = Number(correcaoIA.nota);
+                    feedback_ia = correcaoIA.feedback_detalhado;
+                    acertou = nota >= 50; // Arbitrário, para a flag booleana
+                } catch (err) {
+                    console.error("Falha ao corrigir aberta:", err);
+                    nota = 0;
+                    feedback_ia = "Erro ao processar correção pela IA.";
+                }
+            }
+
+            somaNotas += nota;
+            resultadosProcessados.push({
+                questao_id: resp.questao_id,
+                acertou,
+                nota,
+                resposta_aluno: resp.resposta_aluno || resp.alternativa_selecionada,
+                feedback_ia
+            });
+
+            // 3. Salvar no histórico de respostas
+            await db.query(
+                `INSERT INTO historico_respostas 
+                 (firebase_uid, simulado_id, questao_id, acertou, nota, resposta_aluno, feedback_ia) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [
+                    firebase_uid, 
+                    simulado_id,
+                    resp.questao_id, 
+                    acertou, 
+                    nota,
+                    resp.resposta_aluno || resp.alternativa_selecionada,
+                    feedback_ia
+                ]
+            );
+        });
+
+        await Promise.all(correctionPromises);
+
+        // 4. Atualizar nota geral do simulado
+        const notaGeral = respostas.length > 0 ? (somaNotas / respostas.length) : 0;
+        await db.query(`UPDATE simulados_realizados SET nota_geral = $1 WHERE id = $2`, [notaGeral, simulado_id]);
+
+        return res.json({ success: true, simulado_id, nota_geral: notaGeral, resultados: resultadosProcessados });
 
     } catch (error) {
-        console.error("Erro ao salvar resposta:", error);
-        return res.status(500).json({ error: 'Erro interno ao salvar a resposta.' });
+        console.error("Erro ao finalizar simulado:", error);
+        return res.status(500).json({ error: 'Erro interno ao finalizar simulado.' });
     }
 });
 
