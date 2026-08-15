@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password_super_segura
+      POSTGRES_DB: lumen_db
+    ports:
+      - "5432:5432"
