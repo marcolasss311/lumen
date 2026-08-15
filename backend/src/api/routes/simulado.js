@@ -52,13 +52,12 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
             // Chamada ao Gemini usando a Interactions API
             const interaction = await ai.interactions.create({
                 model: 'gemini-3.6-flash',
-                input: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                }
+                input: prompt
             });
 
-            const questoesIA = JSON.parse(interaction.output_text);
+            // Limpando possível formatação markdown antes de fazer o parse
+            const cleanText = interaction.output_text.replace(/```json/g, '').replace(/```/g, '').trim();
+            const questoesIA = JSON.parse(cleanText);
             
             // Formatando para o mesmo padrão do banco e mesclando
             const formatadasIA = questoesIA.map(q => ({

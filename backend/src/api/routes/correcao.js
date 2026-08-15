@@ -35,13 +35,11 @@ Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
 
         const interaction = await ai.interactions.create({
             model: 'gemini-3.6-flash',
-            input: prompt,
-            config: {
-                responseMimeType: "application/json",
-            }
+            input: prompt
         });
 
-        const correcaoIA = JSON.parse(interaction.output_text);
+        const cleanText = interaction.output_text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const correcaoIA = JSON.parse(cleanText);
 
         // 3. Salvar no historico_respostas
         await db.query(
