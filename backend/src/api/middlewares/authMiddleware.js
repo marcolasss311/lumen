@@ -1,5 +1,6 @@
 const admin = require('../../core/firebase');
 const { getAuth } = require('firebase-admin/auth');
+const db = require('../../db');
 
 const authMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -13,6 +14,15 @@ const authMiddleware = async (req, res, next) => {
     try {
         const decodedToken = await getAuth().verifyIdToken(token);
         req.user = decodedToken;
+
+        // Garante que o usuário existe no banco relacional antes de qualquer requisição avançar
+        await db.query(
+            `INSERT INTO usuarios (firebase_uid, email, nome) 
+             VALUES ($1, $2, $3) 
+             ON CONFLICT (firebase_uid) DO NOTHING`,
+            [decodedToken.uid, decodedToken.email || null, decodedToken.name || 'Usuário Lumen']
+        );
+
         next();
     } catch (error) {
         console.error("Erro na verificação do token:", error);
