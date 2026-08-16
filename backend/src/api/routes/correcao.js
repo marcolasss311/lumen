@@ -27,6 +27,8 @@ Pergunta original: ${questao.pergunta}
 Padrão de resposta esperado: ${questao.gabarito}
 Resposta do aluno: "${resposta_aluno}"
 
+IMPORTANTE PARA QUESTÕES DE EXATAS/CÁLCULOS: Não exija que o aluno escreva a conta inteira. Se a resposta final do aluno estiver correta de acordo com o gabarito, dê nota máxima (100). Só corrija e explique a resolução caso o resultado final esteja incorreto.
+
 Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
 {
   "nota": <numero de 0 a 100>,

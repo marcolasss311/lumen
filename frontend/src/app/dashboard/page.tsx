@@ -58,6 +58,42 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [router]);
 
+  // Carregar simulado salvo no localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("@lumen:simuladoAtivo");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.questoes && parsed.questoes.length > 0) {
+          setQuestoes(parsed.questoes);
+          setRespostas(parsed.respostas || {});
+          setResultados(parsed.resultados || null);
+          setPaginaAtual(parsed.paginaAtual || 1);
+          setSimuladoFinalizado(parsed.simuladoFinalizado || false);
+          setNotaGeral(parsed.notaGeral || null);
+        }
+      } catch (e) {
+        console.error("Erro ao carregar simulado salvo", e);
+      }
+    }
+  }, []);
+
+  // Salvar estado atual do simulado sempre que mudar
+  useEffect(() => {
+    if (questoes.length > 0) {
+      localStorage.setItem("@lumen:simuladoAtivo", JSON.stringify({
+        questoes,
+        respostas,
+        resultados,
+        paginaAtual,
+        simuladoFinalizado,
+        notaGeral
+      }));
+    } else {
+      localStorage.removeItem("@lumen:simuladoAtivo");
+    }
+  }, [questoes, respostas, resultados, paginaAtual, simuladoFinalizado, notaGeral]);
+
   const gerarSimulado = async () => {
     if (!user) return;
     
@@ -210,6 +246,7 @@ export default function Dashboard() {
               <option>2º Ano EM</option>
               <option>3º Ano EM</option>
               <option>Pré-Vestibular/ENEM</option>
+              <option>Ensino Superior</option>
             </select>
           </div>
 
