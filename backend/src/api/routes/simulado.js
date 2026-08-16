@@ -42,6 +42,7 @@ router.post('/gerar', authMiddleware, async (req, res) => {
             let prompt = "";
             if (tipo_questao === 'Fechada') {
                 prompt = `Gere ${questoesFaltantes} questões de múltipla escolha sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
   {
@@ -54,6 +55,7 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 ]`;
             } else if (tipo_questao === 'Aberta') {
                 prompt = `Gere ${questoesFaltantes} questões discursivas (abertas) sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
   {
@@ -64,6 +66,7 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
             } else {
                 prompt = `Gere ${questoesFaltantes} questões mistas sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 Metade deve ser de múltipla escolha e a outra metade discursiva.
+IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao" ("Fechada" ou "Aberta"):
 [
   {
@@ -155,6 +158,7 @@ Padrão de resposta esperado: ${resp.gabarito}
 Resposta do aluno: "${resp.resposta_aluno}"
 
 IMPORTANTE PARA QUESTÕES DE EXATAS/CÁLCULOS: Não exija que o aluno escreva a conta inteira. Se a resposta final do aluno estiver correta de acordo com o gabarito, dê nota máxima (100). Só corrija e explique a resolução caso o resultado final esteja incorreto.
+ALÉM DISSO: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc) no seu feedback. Escreva fórmulas e contas em texto plano.
 
 Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
 {
