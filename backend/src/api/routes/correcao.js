@@ -33,18 +33,19 @@ Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
   "feedback_detalhado": "Sua explicação pedagógica detalhada do que o aluno acertou e onde errou."
 }`;
 
-        const interaction = await ai.interactions.create({
+        const response = await ai.models.generateContent({
             model: 'gemini-3.6-flash',
-            input: prompt
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json"
+            }
         });
 
         let correcaoIA;
         try {
-            const match = interaction.output_text.match(/\{[\s\S]*\}/);
-            const cleanText = match ? match[0] : interaction.output_text.trim();
-            correcaoIA = JSON.parse(cleanText);
+            correcaoIA = JSON.parse(response.text);
         } catch (err) {
-            console.error("Falha ao fazer parse do JSON da IA:", interaction.output_text);
+            console.error("Falha ao fazer parse do JSON da IA:", response.text);
             return res.status(500).json({ error: 'Erro ao interpretar resposta da IA.' });
         }
 

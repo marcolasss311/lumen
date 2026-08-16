@@ -79,19 +79,19 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
 ]`;
             }
 
-            const interaction = await ai.interactions.create({
+            const response = await ai.models.generateContent({
                 model: 'gemini-3.6-flash',
-                input: prompt
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json"
+                }
             });
 
-            // Limpando possível formatação markdown antes de fazer o parse
             let questoesIA;
             try {
-                const match = interaction.output_text.match(/\[[\s\S]*\]/);
-                const cleanText = match ? match[0] : interaction.output_text.trim();
-                questoesIA = JSON.parse(cleanText);
+                questoesIA = JSON.parse(response.text);
             } catch (err) {
-                console.error("Falha ao fazer parse do JSON do simulado:", interaction.output_text);
+                console.error("Falha ao fazer parse do JSON do simulado:", response.text);
                 throw new Error("Erro de formatação da IA");
             }
             
@@ -160,13 +160,15 @@ Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
   "feedback_detalhado": "Sua explicação pedagógica detalhada do que o aluno acertou e onde errou."
 }`;
                 try {
-                    const interaction = await ai.interactions.create({
+                    const response = await ai.models.generateContent({
                         model: 'gemini-3.6-flash',
-                        input: prompt
+                        contents: prompt,
+                        config: {
+                            responseMimeType: "application/json"
+                        }
                     });
-                    const match = interaction.output_text.match(/\{[\s\S]*\}/);
-                    const cleanText = match ? match[0] : interaction.output_text.trim();
-                    const correcaoIA = JSON.parse(cleanText);
+                    
+                    const correcaoIA = JSON.parse(response.text);
                     nota = Number(correcaoIA.nota);
                     feedback_ia = correcaoIA.feedback_detalhado;
                     acertou = nota >= 50; // Arbitrário, para a flag booleana
