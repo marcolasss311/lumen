@@ -34,7 +34,7 @@ Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
 }`;
 
         const interaction = await ai.interactions.create({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.0-flash',
             input: prompt
         });
 

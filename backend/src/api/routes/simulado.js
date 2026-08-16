@@ -80,7 +80,7 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
             }
 
             const interaction = await ai.interactions.create({
-                model: 'gemini-1.5-flash',
+                model: 'gemini-2.0-flash',
                 input: prompt
             });
 
@@ -161,7 +161,7 @@ Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
 }`;
                 try {
                     const interaction = await ai.interactions.create({
-                        model: 'gemini-1.5-flash',
+                        model: 'gemini-2.0-flash',
                         input: prompt
                     });
                     const match = interaction.output_text.match(/\{[\s\S]*\}/);
