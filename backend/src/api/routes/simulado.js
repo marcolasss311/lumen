@@ -9,7 +9,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 // POST /api/simulado/gerar
 router.post('/gerar', authMiddleware, async (req, res) => {
     try {
-        const { materia, topico, ano_escolar, quantidade = 5, foco = 'ENEM', tipo_questao = 'Fechada', priorizar_oficiais = false } = req.body;
+        const { materia, topico, ano_escolar, quantidade = 5, foco = 'ENEM', tipo_questao = 'Fechada', priorizar_oficiais = false, dificuldade = 'Intermediário (Padrão)' } = req.body;
 
         let orderByClause = priorizar_oficiais ? `ORDER BY CASE WHEN origem != 'IA' THEN 0 ELSE 1 END, RANDOM()` : `ORDER BY RANDOM()`;
 
@@ -42,6 +42,7 @@ router.post('/gerar', authMiddleware, async (req, res) => {
             let prompt = "";
             if (tipo_questao === 'Fechada') {
                 prompt = `Gere ${questoesFaltantes} questões de múltipla escolha sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
@@ -55,6 +56,7 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 ]`;
             } else if (tipo_questao === 'Aberta') {
                 prompt = `Gere ${questoesFaltantes} questões discursivas (abertas) sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
@@ -65,6 +67,7 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 ]`;
             } else {
                 prompt = `Gere ${questoesFaltantes} questões mistas sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
 Metade deve ser de múltipla escolha e a outra metade discursiva.
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao" ("Fechada" ou "Aberta"):

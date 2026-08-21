@@ -8,7 +8,7 @@ import RenderizadorSimulado from "@/components/RenderizadorSimulado";
 import RenderizadorDiscursiva from "@/components/RenderizadorDiscursiva";
 import axios from "axios";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Eye, EyeOff, Maximize, Minimize, Plus, X, Printer, BarChart2 } from "lucide-react";
+import { Eye, EyeOff, Maximize, Minimize, Plus, X, Printer, BarChart2, Home as HomeIcon } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
 import Link from "next/link";
@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [quantidade, setQuantidade] = useState(5);
   const [tipoQuestao, setTipoQuestao] = useState("Mesclada");
   const [priorizarOficiais, setPriorizarOficiais] = useState(true);
+  const [dificuldade, setDificuldade] = useState("Intermediário (Padrão)");
 
   // Estados do Simulado
   const [questoes, setQuestoes] = useState<any[]>([]);
@@ -120,7 +121,8 @@ export default function Dashboard() {
         topico: topicos.length > 0 ? topicos.join(", ") : "Geral",
         quantidade: quantidade,
         tipo_questao: tipoQuestao,
-        priorizar_oficiais: priorizarOficiais
+        priorizar_oficiais: priorizarOficiais,
+        dificuldade: dificuldade
       };
 
       const res = await axios.post(
@@ -129,6 +131,7 @@ export default function Dashboard() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setQuestoes(res.data.questoes);
+      setFocusMode(true);
     } catch (error) {
       console.error("Erro ao gerar simulado", error);
       alert("Erro ao gerar simulado. O backend está rodando?");
@@ -205,6 +208,9 @@ export default function Dashboard() {
       <header className="flex justify-between items-center mb-8 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
         <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400">Lumen Dashboard</h1>
         <div className="flex items-center gap-4">
+          <Link href="/home" className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+            <HomeIcon size={16} /> Início
+          </Link>
           <Link href="/desempenho" className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
             <BarChart2 size={16} /> Meu Desempenho
           </Link>
@@ -240,6 +246,13 @@ export default function Dashboard() {
           <div>
             <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Nível Escolar</label>
             <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800" value={anoEscolar} onChange={e => setAnoEscolar(e.target.value)}>
+              <option>1º Ano</option>
+              <option>2º Ano</option>
+              <option>3º Ano</option>
+              <option>4º Ano</option>
+              <option>5º Ano</option>
+              <option>6º Ano</option>
+              <option>7º Ano</option>
               <option>8º Ano</option>
               <option>9º Ano</option>
               <option>1º Ano EM</option>
@@ -359,6 +372,15 @@ export default function Dashboard() {
               <option value="Fechada">Múltipla Escolha</option>
               <option value="Aberta">Discursiva (Aberta)</option>
               <option value="Mesclada">Mesclada (Múltipla + Discursiva)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Nível de Dificuldade (Para IA)</label>
+            <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 mb-3" value={dificuldade} onChange={e => setDificuldade(e.target.value)}>
+              <option>Iniciante</option>
+              <option>Intermediário (Padrão)</option>
+              <option>Avançado / Vestibular</option>
             </select>
             
             <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">

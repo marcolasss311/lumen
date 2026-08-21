@@ -6,7 +6,7 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { ArrowLeft, BarChart2, Hexagon, History } from "lucide-react";
+import { ArrowLeft, BarChart2, Hexagon, History, Home as HomeIcon } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from "recharts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -101,9 +101,12 @@ export default function Desempenho() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
       <header className="flex justify-between items-center mb-8 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard" className="text-gray-500 hover:text-blue-600 dark:hover:text-blue-400">
-            <ArrowLeft size={24} />
+          <Link href="/home" className="text-gray-500 hover:text-blue-600 dark:hover:text-blue-400" title="Início">
+            <HomeIcon size={24} />
           </Link>
+          <button onClick={() => router.back()} className="text-gray-500 hover:text-blue-600 dark:hover:text-blue-400" title="Voltar">
+            <ArrowLeft size={24} />
+          </button>
           <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400">Meu Desempenho</h1>
         </div>
         <div className="flex items-center gap-4">

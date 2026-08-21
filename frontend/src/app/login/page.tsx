@@ -15,7 +15,7 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-      router.push("/dashboard");
+      router.push("/home");
     } catch (err: any) {
       setError(err.message || "Erro ao fazer login com Google");
     }
@@ -30,7 +30,7 @@ export default function Login() {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      router.push("/dashboard");
+      router.push("/home");
     } catch (err: any) {
       setError(err.message || "Erro na autenticação");
     }

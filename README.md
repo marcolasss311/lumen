@@ -1,6 +1,5 @@
 <div align="center">
   <img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-blue?style=for-the-badge" alt="Status" />
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
   <br>
   <h1>🌟 Plataforma Lumen</h1>
   <p><strong>A Revolução nos Estudos Guiada por Inteligência Artificial</strong></p>
@@ -96,7 +95,3 @@ Se você deseja contribuir ou rodar a Lumen na sua própria máquina, siga os pa
 
 A plataforma estará disponível em `http://localhost:3000`! 🎉
 
----
-
-## 📄 Licença
-Este projeto está licenciado sob a licença MIT - veja o arquivo LICENSE para detalhes. Desenvolvido para transformar a forma como alunos estudam.
