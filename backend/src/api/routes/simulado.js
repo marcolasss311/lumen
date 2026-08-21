@@ -123,6 +123,9 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
 
     } catch (error) {
         console.error("Erro ao gerar simulado:", error);
+        if (error.status === 503 || (error.message && error.message.includes("high demand"))) {
+            return res.status(503).json({ error: 'ALTA_DEMANDA' });
+        }
         return res.status(500).json({ error: 'Erro interno ao gerar o simulado.' });
     }
 });

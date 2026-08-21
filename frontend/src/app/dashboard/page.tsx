@@ -132,9 +132,13 @@ export default function Dashboard() {
       );
       setQuestoes(res.data.questoes);
       setFocusMode(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao gerar simulado", error);
-      alert("Erro ao gerar simulado. O backend está rodando?");
+      if (error.response && error.response.status === 503) {
+        alert("Os servidores da inteligência artificial estão com alta demanda no momento. Aguarde alguns segundos e tente novamente!");
+      } else {
+        alert("Erro ao gerar simulado. O backend está rodando?");
+      }
     } finally {
       setGerando(false);
     }
