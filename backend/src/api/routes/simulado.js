@@ -9,7 +9,9 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 // POST /api/simulado/gerar
 router.post('/gerar', authMiddleware, async (req, res) => {
     try {
-        const { materia, topico, ano_escolar, quantidade = 5, foco = 'ENEM', tipo_questao = 'Fechada', priorizar_oficiais = false, dificuldade = 'Intermediário (Padrão)' } = req.body;
+        const { materia, topico, ano_escolar, quantidade = 5, foco = 'ENEM', tipo_questao = 'Fechada', priorizar_oficiais = false, dificuldade = 'Intermediário (Padrão)', nivel = 'medio', curso = null, disciplina = null } = req.body;
+
+        const isSuperior = nivel === 'superior' || Boolean(curso);
 
         let orderByClause = priorizar_oficiais ? `ORDER BY CASE WHEN origem != 'IA' THEN 0 ELSE 1 END, RANDOM()` : `ORDER BY RANDOM()`;
 
@@ -40,8 +42,58 @@ router.post('/gerar', authMiddleware, async (req, res) => {
             const questoesFaltantes = quantidade - questoes.length;
             
             let prompt = "";
-            if (tipo_questao === 'Fechada') {
-                prompt = `Gere ${questoesFaltantes} questões de múltipla escolha sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+
+            if (isSuperior) {
+                // Prompt especializado para Nível Superior / Graduação
+                const cabecalhoSuperior = `Você é um professor universitário e avaliador acadêmico do curso de "${curso || 'Graduação'}". Elabore questões de nível de Ensino Superior sobre a disciplina "${disciplina || materia}", abordando os tópicos "${topico}". NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Utilize rigor técnico, conceitual e metodológico típico de avaliações universitárias.`;
+
+                if (tipo_questao === 'Fechada') {
+                    prompt = `${cabecalhoSuperior}
+Gere ${questoesFaltantes} questões de múltipla escolha.
+IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2, integral de f(x) dx).
+Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
+[
+  {
+    "pergunta": "Texto da pergunta",
+    "alternativas": [
+      { "letra": "A", "texto": "...", "correta": false, "explicacao": "Por que esta está errada..." },
+      { "letra": "B", "texto": "...", "correta": true, "explicacao": null }
+    ]
+  }
+]`;
+                } else if (tipo_questao === 'Aberta') {
+                    prompt = `${cabecalhoSuperior}
+Gere ${questoesFaltantes} questões discursivas/analíticas de nível superior.
+IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
+Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
+[
+  {
+    "pergunta": "Texto do problema ou questão dissertativa acadêmica",
+    "gabarito": "Padrão de resposta detalhado com critérios de pontuação esperados do graduando."
+  }
+]`;
+                } else {
+                    prompt = `${cabecalhoSuperior}
+Gere ${questoesFaltantes} questões mistas de graduação universitária (metade de múltipla escolha e metade discursiva).
+IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
+Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao" ("Fechada" ou "Aberta"):
+[
+  {
+    "tipo_questao": "Fechada",
+    "pergunta": "Texto da pergunta",
+    "alternativas": [ { "letra": "A", "texto": "...", "correta": true, "explicacao": null } ]
+  },
+  {
+    "tipo_questao": "Aberta",
+    "pergunta": "Texto da pergunta dissertativa",
+    "gabarito": "Resposta esperada"
+  }
+]`;
+                }
+            } else {
+                // Prompt padrão para Fundamental e Médio
+                if (tipo_questao === 'Fechada') {
+                    prompt = `Gere ${questoesFaltantes} questões de múltipla escolha sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
@@ -54,8 +106,8 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
     ]
   }
 ]`;
-            } else if (tipo_questao === 'Aberta') {
-                prompt = `Gere ${questoesFaltantes} questões discursivas (abertas) sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+                } else if (tipo_questao === 'Aberta') {
+                    prompt = `Gere ${questoesFaltantes} questões discursivas (abertas) sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
@@ -65,8 +117,8 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
     "gabarito": "Padrão de resposta detalhado esperado do aluno (será usado posteriormente para corrigir)."
   }
 ]`;
-            } else {
-                prompt = `Gere ${questoesFaltantes} questões mistas sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
+                } else {
+                    prompt = `Gere ${questoesFaltantes} questões mistas sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
 Metade deve ser de múltipla escolha e a outra metade discursiva.
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
@@ -83,6 +135,7 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
     "gabarito": "Resposta esperada"
   }
 ]`;
+                }
             }
 
             const response = await ai.models.generateContent({

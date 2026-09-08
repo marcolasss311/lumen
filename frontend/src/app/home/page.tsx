@@ -6,11 +6,12 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Brain, BarChart3, LogOut, Sparkles } from "lucide-react";
+import { Brain, BarChart3, LogOut, Sparkles, BookOpen, GraduationCap, Landmark, X } from "lucide-react";
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showNivelModal, setShowNivelModal] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -29,6 +30,11 @@ export default function Home() {
   if (!user) return null;
 
   const firstName = user.displayName?.split(" ")[0] || "Estudante";
+
+  const handleSelectNivel = (nivel: string) => {
+    setShowNivelModal(false);
+    router.push(`/dashboard?nivel=${nivel}`);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-4">
@@ -62,16 +68,19 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full pt-8">
-          {/* Card: Gerador de Simulado */}
-          <Link href="/dashboard" className="group flex flex-col items-center p-8 bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-xl hover:border-blue-200 dark:hover:border-blue-800 transition-all cursor-pointer">
+          {/* Card: Gerador de Simulado (Abre Modal) */}
+          <button 
+            onClick={() => setShowNivelModal(true)}
+            className="group flex flex-col items-center p-8 bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-xl hover:border-blue-200 dark:hover:border-blue-800 transition-all cursor-pointer text-center"
+          >
             <div className="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-blue-100 dark:group-hover:bg-blue-800/50 transition-transform">
               <Brain className="text-blue-600 dark:text-blue-400" size={32} />
             </div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Criar Novo Simulado</h2>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
-              Gere listas de questões objetivas e discursivas personalizadas pelo seu nível e matéria.
+              Gere listas de questões personalizadas para seu nível de ensino, matéria e curso.
             </p>
-          </Link>
+          </button>
 
           {/* Card: Desempenho */}
           <Link href="/desempenho" className="group flex flex-col items-center p-8 bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-xl hover:border-purple-200 dark:hover:border-purple-800 transition-all cursor-pointer">
@@ -86,6 +95,73 @@ export default function Home() {
         </div>
 
       </main>
+
+      {/* Modal de Escolha do Nível */}
+      {showNivelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700 max-w-lg w-full p-6 space-y-6 relative">
+            <div className="flex justify-between items-center border-b dark:border-gray-700 pb-3">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Qual é o seu nível de estudo?</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Adaptamos as questões e os filtros de acordo com sua fase</p>
+              </div>
+              <button 
+                onClick={() => setShowNivelModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* Opção 1: Ensino Fundamental */}
+              <button 
+                onClick={() => handleSelectNivel("fundamental")}
+                className="w-full group flex items-center gap-4 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 text-left transition-all cursor-pointer"
+              >
+                <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <BookOpen size={24} />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Ensino Fundamental</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Do 1º ao 9º Ano com linguagem e conceitos didáticos adequados à idade.</p>
+                </div>
+              </button>
+
+              {/* Opção 2: Ensino Médio & Pré-Vestibular */}
+              <button 
+                onClick={() => handleSelectNivel("medio")}
+                className="w-full group flex items-center gap-4 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 text-left transition-all cursor-pointer"
+              >
+                <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <GraduationCap size={24} />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Ensino Médio & Pré-Vestibular</h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">1º ao 3º Ano do EM, preparação intensiva para ENEM, FUVEST e vestibulares.</p>
+                </div>
+              </button>
+
+              {/* Opção 3: Ensino Superior */}
+              <button 
+                onClick={() => handleSelectNivel("superior")}
+                className="w-full group flex items-center gap-4 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-indigo-500 dark:hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20 text-left transition-all cursor-pointer"
+              >
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <Landmark size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">Ensino Superior (Graduação)</h4>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300">Novo</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Digite seu Curso (ex: Direito, Engenharia) e a Disciplina matriculada na faculdade.</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

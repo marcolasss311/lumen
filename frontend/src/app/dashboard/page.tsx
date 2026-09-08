@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import RenderizadorSimulado from "@/components/RenderizadorSimulado";
 import RenderizadorDiscursiva from "@/components/RenderizadorDiscursiva";
 import axios from "axios";
@@ -13,10 +13,16 @@ import { useReactToPrint } from "react-to-print";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
 import Link from "next/link";
 
-export default function Dashboard() {
+function DashboardContent() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const paramNivel = searchParams.get("nivel");
+
+  const [nivelSegmento, setNivelSegmento] = useState<"fundamental" | "medio" | "superior">("medio");
+  const [curso, setCurso] = useState("");
+  const [disciplina, setDisciplina] = useState("");
 
   const [anoEscolar, setAnoEscolar] = useState("Pré-Vestibular/ENEM");
   const [modoMateria, setModoMateria] = useState("Única");
@@ -59,6 +65,20 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [router]);
 
+  // Sincronizar nível com base no parâmetro da URL
+  useEffect(() => {
+    if (paramNivel === "fundamental" || paramNivel === "medio" || paramNivel === "superior") {
+      setNivelSegmento(paramNivel);
+      if (paramNivel === "fundamental") {
+        setAnoEscolar("6º Ano");
+      } else if (paramNivel === "superior") {
+        setAnoEscolar("Ensino Superior");
+      } else {
+        setAnoEscolar("Pré-Vestibular/ENEM");
+      }
+    }
+  }, [paramNivel]);
+
   // Carregar simulado salvo no localStorage
   useEffect(() => {
     const saved = localStorage.getItem("@lumen:simuladoAtivo");
@@ -99,11 +119,23 @@ export default function Dashboard() {
     if (!user) return;
     
     // Validações
-    if (modoMateria === "Múltiplas" && materiasMultiplas.length === 0) {
-      return alert("Selecione ao menos uma matéria!");
-    }
-    if (topicos.length === 0 && modoMateria === "Única") {
-      return alert("Adicione ao menos um tópico!");
+    if (nivelSegmento === "superior") {
+      if (!curso.trim()) {
+        return alert("Por favor, digite o seu curso de graduação!");
+      }
+      if (!disciplina.trim()) {
+        return alert("Por favor, digite a disciplina ou matéria da faculdade!");
+      }
+      if (topicos.length === 0) {
+        return alert("Adicione ao menos um tópico ou conteúdo da matéria!");
+      }
+    } else {
+      if (modoMateria === "Múltiplas" && materiasMultiplas.length === 0) {
+        return alert("Selecione ao menos uma matéria!");
+      }
+      if (topicos.length === 0 && modoMateria === "Única") {
+        return alert("Adicione ao menos um tópico!");
+      }
     }
 
     setGerando(true);
@@ -116,12 +148,17 @@ export default function Dashboard() {
     try {
       const token = await user.getIdToken();
       const payload = {
-        ano_escolar: anoEscolar,
-        materia: modoMateria === "Única" ? materiaUnica : materiasMultiplas.join(", "),
+        ano_escolar: nivelSegmento === "superior" ? "Ensino Superior" : anoEscolar,
+        nivel: nivelSegmento,
+        curso: nivelSegmento === "superior" ? curso.trim() : null,
+        disciplina: nivelSegmento === "superior" ? disciplina.trim() : null,
+        materia: nivelSegmento === "superior" 
+          ? disciplina.trim() 
+          : (modoMateria === "Única" ? materiaUnica : materiasMultiplas.join(", ")),
         topico: topicos.length > 0 ? topicos.join(", ") : "Geral",
         quantidade: quantidade,
         tipo_questao: tipoQuestao,
-        priorizar_oficiais: priorizarOficiais,
+        priorizar_oficiais: nivelSegmento === "superior" ? false : priorizarOficiais,
         dificuldade: dificuldade
       };
 
@@ -246,76 +283,151 @@ export default function Dashboard() {
         {!focusMode && (
           <div className="md:col-span-1 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
             <h2 className="font-semibold text-lg border-b dark:border-gray-700 pb-2">Configurar Bateria</h2>
-          
-          <div>
-            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Nível Escolar</label>
-            <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800" value={anoEscolar} onChange={e => setAnoEscolar(e.target.value)}>
-              <option>1º Ano</option>
-              <option>2º Ano</option>
-              <option>3º Ano</option>
-              <option>4º Ano</option>
-              <option>5º Ano</option>
-              <option>6º Ano</option>
-              <option>7º Ano</option>
-              <option>8º Ano</option>
-              <option>9º Ano</option>
-              <option>1º Ano EM</option>
-              <option>2º Ano EM</option>
-              <option>3º Ano EM</option>
-              <option>Pré-Vestibular/ENEM</option>
-              <option>Ensino Superior</option>
-            </select>
-          </div>
 
-          <div>
-            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Modo de Matéria</label>
-            <div className="flex gap-2 mb-2">
-              <button 
-                onClick={() => setModoMateria("Única")} 
-                className={`flex-1 py-1 text-sm rounded ${modoMateria === "Única" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}
-              >
-                Única
-              </button>
-              <button 
-                onClick={() => setModoMateria("Múltiplas")} 
-                className={`flex-1 py-1 text-sm rounded ${modoMateria === "Múltiplas" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}
-              >
-                Várias
-              </button>
+            {/* Seletor de Nível */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Nível de Ensino</label>
+              <div className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => { setNivelSegmento("fundamental"); setAnoEscolar("6º Ano"); }}
+                  className={`py-1.5 text-xs font-medium rounded-md transition-all ${
+                    nivelSegmento === "fundamental" 
+                      ? "bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-xs" 
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                >
+                  Fundamental
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setNivelSegmento("medio"); setAnoEscolar("Pré-Vestibular/ENEM"); }}
+                  className={`py-1.5 text-xs font-medium rounded-md transition-all ${
+                    nivelSegmento === "medio" 
+                      ? "bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-xs" 
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                >
+                  Médio
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setNivelSegmento("superior"); setAnoEscolar("Ensino Superior"); }}
+                  className={`py-1.5 text-xs font-medium rounded-md transition-all ${
+                    nivelSegmento === "superior" 
+                      ? "bg-indigo-600 text-white shadow-xs" 
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                  }`}
+                >
+                  Superior
+                </button>
+              </div>
             </div>
 
-            {modoMateria === "Única" ? (
-              <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800" value={materiaUnica} onChange={e => setMateriaUnica(e.target.value)}>
-                <option>Matemática</option>
-                <option>Português</option>
-                <option>História</option>
-                <option>Geografia</option>
-                <option>Física</option>
-                <option>Química</option>
-                <option>Biologia</option>
-                <option>Filosofia</option>
-                <option>Sociologia</option>
-                <option>Inglês</option>
-                <option>Espanhol</option>
-              </select>
-            ) : (
-              <div className="max-h-32 overflow-y-auto border dark:border-gray-600 rounded p-2 space-y-1">
-                {["Matemática", "Português", "História", "Geografia", "Física", "Química", "Biologia", "Filosofia", "Sociologia", "Inglês", "Espanhol"].map(mat => (
-                  <label key={mat} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input 
-                      type="checkbox" 
-                      checked={materiasMultiplas.includes(mat)}
-                      onChange={(e) => {
-                        if (e.target.checked) setMateriasMultiplas([...materiasMultiplas, mat]);
-                        else setMateriasMultiplas(materiasMultiplas.filter(m => m !== mat));
-                      }}
-                    />
-                    {mat}
-                  </label>
-                ))}
+            {nivelSegmento === "superior" ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1 font-medium">Curso de Graduação</label>
+                  <input 
+                    type="text" 
+                    className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 text-sm" 
+                    value={curso} 
+                    onChange={e => setCurso(e.target.value)} 
+                    placeholder="Ex: Direito, Engenharia de Software, Medicina..." 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1 font-medium">Disciplina / Matéria Matriculada</label>
+                  <input 
+                    type="text" 
+                    className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 text-sm" 
+                    value={disciplina} 
+                    onChange={e => setDisciplina(e.target.value)} 
+                    placeholder="Ex: Cálculo I, Direito Penal, Anatomia..." 
+                  />
+                </div>
               </div>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Nível Escolar</label>
+                  <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800" value={anoEscolar} onChange={e => setAnoEscolar(e.target.value)}>
+                    {nivelSegmento === "fundamental" ? (
+                      <>
+                        <option>1º Ano</option>
+                        <option>2º Ano</option>
+                        <option>3º Ano</option>
+                        <option>4º Ano</option>
+                        <option>5º Ano</option>
+                        <option>6º Ano</option>
+                        <option>7º Ano</option>
+                        <option>8º Ano</option>
+                        <option>9º Ano</option>
+                      </>
+                    ) : (
+                      <>
+                        <option>1º Ano EM</option>
+                        <option>2º Ano EM</option>
+                        <option>3º Ano EM</option>
+                        <option>Pré-Vestibular/ENEM</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Modo de Matéria</label>
+                  <div className="flex gap-2 mb-2">
+                    <button 
+                      type="button"
+                      onClick={() => setModoMateria("Única")} 
+                      className={`flex-1 py-1 text-sm rounded ${modoMateria === "Única" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}
+                    >
+                      Única
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setModoMateria("Múltiplas")} 
+                      className={`flex-1 py-1 text-sm rounded ${modoMateria === "Múltiplas" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}
+                    >
+                      Várias
+                    </button>
+                  </div>
+
+                  {modoMateria === "Única" ? (
+                    <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800" value={materiaUnica} onChange={e => setMateriaUnica(e.target.value)}>
+                      <option>Matemática</option>
+                      <option>Português</option>
+                      <option>História</option>
+                      <option>Geografia</option>
+                      <option>Física</option>
+                      <option>Química</option>
+                      <option>Biologia</option>
+                      <option>Filosofia</option>
+                      <option>Sociologia</option>
+                      <option>Inglês</option>
+                      <option>Espanhol</option>
+                    </select>
+                  ) : (
+                    <div className="max-h-32 overflow-y-auto border dark:border-gray-600 rounded p-2 space-y-1">
+                      {["Matemática", "Português", "História", "Geografia", "Física", "Química", "Biologia", "Filosofia", "Sociologia", "Inglês", "Espanhol"].map(mat => (
+                        <label key={mat} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                          <input 
+                            type="checkbox" 
+                            checked={materiasMultiplas.includes(mat)}
+                            onChange={(e) => {
+                              if (e.target.checked) setMateriasMultiplas([...materiasMultiplas, mat]);
+                              else setMateriasMultiplas(materiasMultiplas.filter(m => m !== mat));
+                            }}
+                          />
+                          {mat}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
-          </div>
 
           <div>
             <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Tópicos</label>
@@ -325,7 +437,7 @@ export default function Dashboard() {
                 className="flex-1 border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 text-sm" 
                 value={novoTopico} 
                 onChange={e => setNovoTopico(e.target.value)} 
-                placeholder="Ex: Frações..."
+                placeholder={nivelSegmento === "superior" ? "Ex: Derivadas, Crimes Contra a Vida..." : "Ex: Frações, Revolução Francesa..."}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && novoTopico.trim()) {
                     if (!topicos.includes(novoTopico.trim())) setTopicos([...topicos, novoTopico.trim()]);
@@ -334,6 +446,7 @@ export default function Dashboard() {
                 }}
               />
               <button 
+                type="button"
                 onClick={() => {
                   if (novoTopico.trim() && !topicos.includes(novoTopico.trim())) {
                     setTopicos([...topicos, novoTopico.trim()]);
@@ -350,7 +463,7 @@ export default function Dashboard() {
                 {topicos.map(t => (
                   <span key={t} className="flex items-center gap-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded text-xs">
                     {t}
-                    <button onClick={() => setTopicos(topicos.filter(item => item !== t))} className="text-blue-500 hover:text-blue-700 dark:hover:text-blue-200">
+                    <button type="button" onClick={() => setTopicos(topicos.filter(item => item !== t))} className="text-blue-500 hover:text-blue-700 dark:hover:text-blue-200">
                       <X size={14} />
                     </button>
                   </span>
@@ -382,20 +495,32 @@ export default function Dashboard() {
           <div>
             <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Nível de Dificuldade (Para IA)</label>
             <select className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 mb-3" value={dificuldade} onChange={e => setDificuldade(e.target.value)}>
-              <option>Iniciante</option>
-              <option>Intermediário (Padrão)</option>
-              <option>Avançado / Vestibular</option>
+              {nivelSegmento === "superior" ? (
+                <>
+                  <option>Iniciante (Conceitual / Básico)</option>
+                  <option>Intermediário (Padrão de Prova)</option>
+                  <option>Avançado (Exames / ENADE / OAB)</option>
+                </>
+              ) : (
+                <>
+                  <option>Iniciante</option>
+                  <option>Intermediário (Padrão)</option>
+                  <option>Avançado / Vestibular</option>
+                </>
+              )}
             </select>
             
-            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-              <input 
-                type="checkbox" 
-                checked={priorizarOficiais}
-                onChange={e => setPriorizarOficiais(e.target.checked)}
-                className="rounded text-blue-600"
-              />
-              Priorizar Questões Oficiais (Provas)
-            </label>
+            {nivelSegmento !== "superior" && (
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input 
+                  type="checkbox" 
+                  checked={priorizarOficiais}
+                  onChange={e => setPriorizarOficiais(e.target.checked)}
+                  className="rounded text-blue-600"
+                />
+                Priorizar Questões Oficiais (Provas)
+              </label>
+            )}
           </div>
 
           <button 
@@ -510,5 +635,13 @@ export default function Dashboard() {
         />
       </div>
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center dark:bg-gray-900 text-gray-500">Carregando painel...</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
