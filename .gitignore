@@ -12,6 +12,8 @@ frontend/node_modules/
 # credenciais do firebase admin
 serviceAccountKey.json
 backend/serviceAccountKey.json
+backend/serviceAccountKey.json.json
+*serviceAccountKey*.json
 
 # build do next.js
 .next/
