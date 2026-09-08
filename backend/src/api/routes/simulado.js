@@ -2,9 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../db');
 const authMiddleware = require('../middlewares/authMiddleware');
-const { GoogleGenAI } = require('@google/genai');
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const { generateWithFallback } = require('../../core/gemini');
 
 // POST /api/simulado/gerar
 router.post('/gerar', authMiddleware, async (req, res) => {
@@ -138,8 +136,7 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
                 }
             }
 
-            const response = await ai.models.generateContent({
-                model: 'gemini-3.6-flash',
+            const response = await generateWithFallback({
                 contents: prompt,
                 config: {
                     responseMimeType: "application/json"
