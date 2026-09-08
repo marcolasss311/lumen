@@ -1,4 +1,5 @@
 import React from 'react';
+import TextoComTabela from './TextoComTabela';
 
 interface Props {
   questoes: any[];
@@ -20,7 +21,9 @@ export const SimuladoParaImprimir = React.forwardRef<HTMLDivElement, Props>(({ q
         {questoes.map((q, idx) => (
           <div key={idx} className="break-inside-avoid">
             <h3 className="font-bold text-lg mb-2">{idx + 1}. ({q.materia} - {q.topico})</h3>
-            <p className="mb-4 whitespace-pre-wrap">{q.pergunta}</p>
+            <div className="mb-4">
+              <TextoComTabela texto={q.pergunta} />
+            </div>
 
             {q.tipo_questao === 'Aberta' ? (
               <div className="mt-4 border-l-2 border-gray-300 pl-4 h-32">

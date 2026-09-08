@@ -1,5 +1,7 @@
 "use client";
 
+import TextoComTabela from "@/components/TextoComTabela";
+
 interface Props {
   questao: any;
   index: number;
@@ -22,10 +24,12 @@ export default function RenderizadorDiscursiva({ questao, index, modo, respostaS
         <span className="font-semibold text-blue-600 dark:text-blue-400">Questão {index} (Discursiva)</span>
         <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">{questao.origem}</span>
       </div>
-      <p className="text-gray-800 dark:text-gray-200 mb-6 font-medium whitespace-pre-wrap">
-        {questao.origem && questao.origem !== 'IA' && questao.origem !== 'Feedback' ? `(${questao.origem}) ` : ''}
-        {questao.pergunta}
-      </p>
+      <div className="text-gray-800 dark:text-gray-200 mb-6 font-medium">
+        {questao.origem && questao.origem !== 'IA' && questao.origem !== 'Feedback' && (
+          <span className="font-bold text-blue-600 dark:text-blue-400 mr-2">({questao.origem})</span>
+        )}
+        <TextoComTabela texto={questao.pergunta} />
+      </div>
 
       {!isFeedback ? (
         <div className="space-y-4">
@@ -53,9 +57,7 @@ export default function RenderizadorDiscursiva({ questao, index, modo, respostaS
                 </div>
               </div>
               
-              <p className="text-gray-800 dark:text-gray-300 whitespace-pre-wrap text-sm leading-relaxed">
-                {feedback.feedback_ia}
-              </p>
+              <TextoComTabela texto={feedback.feedback_ia} className="text-gray-800 dark:text-gray-300 text-sm leading-relaxed" />
             </div>
           )}
         </div>

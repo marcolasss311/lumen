@@ -41,9 +41,11 @@ router.post('/gerar', authMiddleware, async (req, res) => {
             
             let prompt = "";
 
+            const regraTabelas = `TABELAS E DADOS: Sempre que a interpretação da questão depender de comparação de dados, propriedades químicas/físicas, experimentos, estatísticas, cronologias ou tabelas-verdade, inclua a tabela diretamente no texto da pergunta formatada em Markdown padrão (com barras verticais | e separador |--|--|).`;
+
             if (isSuperior) {
                 // Prompt especializado para Nível Superior / Graduação
-                const cabecalhoSuperior = `Você é um professor universitário e avaliador acadêmico do curso de "${curso || 'Graduação'}". Elabore questões de nível de Ensino Superior sobre a disciplina "${disciplina || materia}", abordando os tópicos "${topico}". NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Utilize rigor técnico, conceitual e metodológico típico de avaliações universitárias.`;
+                const cabecalhoSuperior = `Você é um professor universitário e avaliador acadêmico do curso de "${curso || 'Graduação'}". Elabore questões de nível de Ensino Superior sobre a disciplina "${disciplina || materia}", abordando os tópicos "${topico}". NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Utilize rigor técnico, conceitual e metodológico típico de avaliações universitárias.\n${regraTabelas}`;
 
                 if (tipo_questao === 'Fechada') {
                     prompt = `${cabecalhoSuperior}
@@ -93,6 +95,7 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
                 if (tipo_questao === 'Fechada') {
                     prompt = `Gere ${questoesFaltantes} questões de múltipla escolha sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
+${regraTabelas}
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
@@ -107,6 +110,7 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
                 } else if (tipo_questao === 'Aberta') {
                     prompt = `Gere ${questoesFaltantes} questões discursivas (abertas) sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
+${regraTabelas}
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
@@ -118,6 +122,7 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
                 } else {
                     prompt = `Gere ${questoesFaltantes} questões mistas sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
+${regraTabelas}
 Metade deve ser de múltipla escolha e a outra metade discursiva.
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao" ("Fechada" ou "Aberta"):
