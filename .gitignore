@@ -15,11 +15,13 @@ backend/serviceAccountKey.json
 backend/serviceAccountKey.json.json
 *serviceAccountKey*.json
 
-# build do next.js
+# build do next.js e firebase
 .next/
 out/
 frontend/.next/
 frontend/out/
+.firebase/
+frontend/.firebase/
 
 # logs
 npm-debug.log*

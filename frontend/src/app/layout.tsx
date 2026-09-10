@@ -15,7 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "LumenApp | Plataforma de Estudos com IA",
-  description: "Gere simulados, pratique questões e receba correções detalhadas com o poder da Inteligência Artificial.",
+  description:
+    "Gere simulados, pratique questões e receba correções detalhadas com o poder da Inteligência Artificial.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import {
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+} from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 
@@ -40,43 +44,58 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-md">
         <h1 className="text-3xl font-bold text-center text-blue-600">Lumen</h1>
-        <p className="text-center text-gray-500">Plataforma de Estudos Inteligente</p>
-        
-        {error && <div className="p-3 text-sm text-red-600 bg-red-100 rounded-md">{error}</div>}
+        <p className="text-center text-gray-500">
+          Plataforma de Estudos Inteligente
+        </p>
+
+        {error && (
+          <div className="p-3 text-sm text-red-600 bg-red-100 rounded-md">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleEmailAuth} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
-            <input 
-              type="email" 
+            <label className="block text-sm font-medium text-gray-700">
+              Email
+            </label>
+            <input
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 mt-1 text-black border rounded-md focus:outline-none focus:ring focus:ring-blue-200" 
+              className="w-full px-3 py-2 mt-1 text-black border rounded-md focus:outline-none focus:ring focus:ring-blue-200"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Senha</label>
-            <input 
-              type="password" 
+            <label className="block text-sm font-medium text-gray-700">
+              Senha
+            </label>
+            <input
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 mt-1 text-black border rounded-md focus:outline-none focus:ring focus:ring-blue-200"
-              required 
+              required
             />
           </div>
-          <button type="submit" className="w-full py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors">
+          <button
+            type="submit"
+            className="w-full py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+          >
             {isRegistering ? "Criar Conta" : "Entrar com Email"}
           </button>
         </form>
 
         <div className="text-center text-sm">
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={() => setIsRegistering(!isRegistering)}
             className="text-blue-600 hover:underline"
           >
-            {isRegistering ? "Já tem uma conta? Faça login" : "Ainda não tem conta? Crie agora"}
+            {isRegistering
+              ? "Já tem uma conta? Faça login"
+              : "Ainda não tem conta? Crie agora"}
           </button>
         </div>
 
@@ -89,7 +108,7 @@ export default function Login() {
           </div>
         </div>
 
-        <button 
+        <button
           onClick={handleGoogleLogin}
           className="w-full py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 flex items-center justify-center gap-2"
         >

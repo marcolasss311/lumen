@@ -1,12 +1,12 @@
-const db = require('./index');
+const db = require("./index");
 
 const init = async () => {
-    try {
-        console.log("Iniciando migração do banco de dados...");
-        
-        await db.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
-        
-        await db.query(`
+  try {
+    console.log("Iniciando migração do banco de dados...");
+
+    await db.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`);
+
+    await db.query(`
             CREATE TABLE IF NOT EXISTS usuarios (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 firebase_uid VARCHAR(128) UNIQUE NOT NULL,
@@ -17,7 +17,7 @@ const init = async () => {
             );
         `);
 
-        await db.query(`
+    await db.query(`
             CREATE TABLE IF NOT EXISTS questoes (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 materia VARCHAR(100) NOT NULL,
@@ -33,7 +33,7 @@ const init = async () => {
             );
         `);
 
-        await db.query(`
+    await db.query(`
             CREATE TABLE IF NOT EXISTS simulados_realizados (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 firebase_uid VARCHAR(128) NOT NULL,
@@ -44,7 +44,7 @@ const init = async () => {
             );
         `);
 
-        await db.query(`
+    await db.query(`
             CREATE TABLE IF NOT EXISTS historico_respostas (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 firebase_uid VARCHAR(128) NOT NULL,
@@ -61,18 +61,28 @@ const init = async () => {
             );
         `);
 
-        await db.query(`CREATE INDEX IF NOT EXISTS idx_usuarios_firebase_uid ON usuarios(firebase_uid);`);
-        await db.query(`CREATE INDEX IF NOT EXISTS idx_questoes_filtros ON questoes(materia, topico, ano_escolar_alvo);`);
-        await db.query(`CREATE INDEX IF NOT EXISTS idx_questoes_origem ON questoes(origem);`);
-        await db.query(`CREATE INDEX IF NOT EXISTS idx_historico_aluno_data ON historico_respostas(firebase_uid, data_resposta);`);
-        await db.query(`CREATE INDEX IF NOT EXISTS idx_historico_questao ON historico_respostas(questao_id);`);
+    await db.query(
+      `CREATE INDEX IF NOT EXISTS idx_usuarios_firebase_uid ON usuarios(firebase_uid);`,
+    );
+    await db.query(
+      `CREATE INDEX IF NOT EXISTS idx_questoes_filtros ON questoes(materia, topico, ano_escolar_alvo);`,
+    );
+    await db.query(
+      `CREATE INDEX IF NOT EXISTS idx_questoes_origem ON questoes(origem);`,
+    );
+    await db.query(
+      `CREATE INDEX IF NOT EXISTS idx_historico_aluno_data ON historico_respostas(firebase_uid, data_resposta);`,
+    );
+    await db.query(
+      `CREATE INDEX IF NOT EXISTS idx_historico_questao ON historico_respostas(questao_id);`,
+    );
 
-        console.log("Migração concluída com sucesso!");
-    } catch (error) {
-        console.error("Erro durante a migração:", error);
-    } finally {
-        process.exit();
-    }
+    console.log("Migração concluída com sucesso!");
+  } catch (error) {
+    console.error("Erro durante a migração:", error);
+  } finally {
+    process.exit();
+  }
 };
 
 init();

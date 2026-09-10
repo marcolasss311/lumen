@@ -1,33 +1,40 @@
-const admin = require('../../core/firebase');
-const { getAuth } = require('firebase-admin/auth');
-const db = require('../../db');
+const admin = require("../../core/firebase");
+const { getAuth } = require("firebase-admin/auth");
+const db = require("../../db");
 
 const authMiddleware = async (req, res, next) => {
-    const authHeader = req.headers.authorization;
+  const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Token de autenticação não fornecido ou inválido.' });
-    }
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res
+      .status(401)
+      .json({ error: "Token de autenticação não fornecido ou inválido." });
+  }
 
-    const token = authHeader.split('Bearer ')[1];
+  const token = authHeader.split("Bearer ")[1];
 
-    try {
-        const decodedToken = await getAuth().verifyIdToken(token);
-        req.user = decodedToken;
+  try {
+    const decodedToken = await getAuth().verifyIdToken(token);
+    req.user = decodedToken;
 
-        // Garante que o usuário existe no banco relacional antes de qualquer requisição avançar
-        await db.query(
-            `INSERT INTO usuarios (firebase_uid, email, nome, ano_escolar_atual) 
+    // Garante que o usuário existe no banco relacional antes de qualquer requisição avançar
+    await db.query(
+      `INSERT INTO usuarios (firebase_uid, email, nome, ano_escolar_atual) 
              VALUES ($1, $2, $3, $4) 
              ON CONFLICT (firebase_uid) DO NOTHING`,
-            [decodedToken.uid, decodedToken.email || null, decodedToken.name || 'Usuário Lumen', 'Não Informado']
-        );
+      [
+        decodedToken.uid,
+        decodedToken.email || null,
+        decodedToken.name || "Usuário Lumen",
+        "Não Informado",
+      ],
+    );
 
-        next();
-    } catch (error) {
-        console.error("Erro na verificação do token:", error);
-        return res.status(403).json({ error: 'Token inválido ou expirado.' });
-    }
+    next();
+  } catch (error) {
+    console.error("Erro na verificação do token:", error);
+    return res.status(403).json({ error: "Token inválido ou expirado." });
+  }
 };
 
 module.exports = authMiddleware;

@@ -13,7 +13,9 @@ export function ThemeToggle() {
   }, []);
 
   if (!mounted) {
-    return <div className="w-14 h-7 rounded-full bg-gray-200 dark:bg-gray-700 opacity-50" />;
+    return (
+      <div className="w-14 h-7 rounded-full bg-gray-200 dark:bg-gray-700 opacity-50" />
+    );
   }
 
   const isDark = theme === "dark";

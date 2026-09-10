@@ -36,9 +36,12 @@ export default function TextoComTabela({ texto, className = "" }: Props) {
     if (currentTextLines.length > 0) {
       const block = currentTextLines.join("\n");
       elements.push(
-        <span key={`text-${keyPrefix}`} className="whitespace-pre-wrap leading-relaxed">
+        <span
+          key={`text-${keyPrefix}`}
+          className="whitespace-pre-wrap leading-relaxed"
+        >
           {formatarNegrito(block)}
-        </span>
+        </span>,
       );
       currentTextLines = [];
     }
@@ -61,12 +64,18 @@ export default function TextoComTabela({ texto, className = "" }: Props) {
       const rows = dataLines.map(parseCells).filter((row) => row.length > 0);
 
       elements.push(
-        <div key={`table-${keyPrefix}`} className="overflow-x-auto my-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-800/90">
+        <div
+          key={`table-${keyPrefix}`}
+          className="overflow-x-auto my-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-800/90"
+        >
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm text-left">
             <thead className="bg-gray-100 dark:bg-gray-900 font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700">
               <tr>
                 {headers.map((h, i) => (
-                  <th key={i} className="px-4 py-3 border-r last:border-r-0 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
+                  <th
+                    key={i}
+                    className="px-4 py-3 border-r last:border-r-0 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100"
+                  >
                     {formatarNegrito(h)}
                   </th>
                 ))}
@@ -74,9 +83,19 @@ export default function TextoComTabela({ texto, className = "" }: Props) {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
               {rows.map((row, rIdx) => (
-                <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white dark:bg-gray-800/90 hover:bg-gray-50/80 dark:hover:bg-gray-700/40 transition-colors" : "bg-gray-50/70 dark:bg-gray-900/40 hover:bg-gray-50/80 dark:hover:bg-gray-700/40 transition-colors"}>
+                <tr
+                  key={rIdx}
+                  className={
+                    rIdx % 2 === 0
+                      ? "bg-white dark:bg-gray-800/90 hover:bg-gray-50/80 dark:hover:bg-gray-700/40 transition-colors"
+                      : "bg-gray-50/70 dark:bg-gray-900/40 hover:bg-gray-50/80 dark:hover:bg-gray-700/40 transition-colors"
+                  }
+                >
                   {row.map((cell, cIdx) => (
-                    <td key={cIdx} className="px-4 py-2.5 border-r last:border-r-0 border-gray-200 dark:border-gray-700">
+                    <td
+                      key={cIdx}
+                      className="px-4 py-2.5 border-r last:border-r-0 border-gray-200 dark:border-gray-700"
+                    >
                       {formatarNegrito(cell)}
                     </td>
                   ))}
@@ -84,7 +103,7 @@ export default function TextoComTabela({ texto, className = "" }: Props) {
               ))}
             </tbody>
           </table>
-        </div>
+        </div>,
       );
     } else if (currentTableLines.length > 0) {
       currentTextLines.push(...currentTableLines);
@@ -96,7 +115,8 @@ export default function TextoComTabela({ texto, className = "" }: Props) {
 
   lines.forEach((line, idx) => {
     const trimmed = line.trim();
-    const isTableLine = trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.includes("|");
+    const isTableLine =
+      trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.includes("|");
 
     if (isTableLine) {
       if (!inTable) {

@@ -30,9 +30,12 @@ export default function NavegacaoQuestionario({
 
   const totalQuestoes = questoes.length;
   const respondidasCount = Object.keys(respostas).filter(
-    (id) => respostas[id] && respostas[id].trim() !== ""
+    (id) => respostas[id] && respostas[id].trim() !== "",
   ).length;
-  const porcentagem = totalQuestoes > 0 ? Math.round((respondidasCount / totalQuestoes) * 100) : 0;
+  const porcentagem =
+    totalQuestoes > 0
+      ? Math.round((respondidasCount / totalQuestoes) * 100)
+      : 0;
 
   // Renderizador da grade de cartões
   const renderGrid = () => (
@@ -41,7 +44,9 @@ export default function NavegacaoQuestionario({
         const questaoNum = idx + 1;
         const pageOfQuestao = Math.floor(idx / itensPorPagina) + 1;
         const isCurrentPage = pageOfQuestao === paginaAtual;
-        const isRespondida = Boolean(respostas[q.id] && respostas[q.id].trim() !== "");
+        const isRespondida = Boolean(
+          respostas[q.id] && respostas[q.id].trim() !== "",
+        );
 
         let feedback = null;
         if (simuladoFinalizado && resultados) {
@@ -55,14 +60,16 @@ export default function NavegacaoQuestionario({
         if (simuladoFinalizado && feedback) {
           const acertou = feedback.acertou || Number(feedback.nota) >= 50;
           if (acertou) {
-            tileStyle = "bg-green-50 dark:bg-green-950/40 border-green-400 dark:border-green-600 text-green-800 dark:text-green-300";
+            tileStyle =
+              "bg-green-50 dark:bg-green-950/40 border-green-400 dark:border-green-600 text-green-800 dark:text-green-300";
             bottomIndicator = (
               <div className="w-full bg-green-500 text-white flex items-center justify-center py-0.5 text-[10px]">
                 <Check size={11} strokeWidth={3} />
               </div>
             );
           } else {
-            tileStyle = "bg-red-50 dark:bg-red-950/40 border-red-400 dark:border-red-600 text-red-800 dark:text-red-300";
+            tileStyle =
+              "bg-red-50 dark:bg-red-950/40 border-red-400 dark:border-red-600 text-red-800 dark:text-red-300";
             bottomIndicator = (
               <div className="w-full bg-red-500 text-white flex items-center justify-center py-0.5 text-[10px]">
                 <XIcon size={11} strokeWidth={3} />
@@ -72,14 +79,16 @@ export default function NavegacaoQuestionario({
         } else {
           // Durante a prova
           if (isRespondida) {
-            tileStyle = "bg-blue-50 dark:bg-blue-950/30 border-blue-400 dark:border-blue-600 text-blue-900 dark:text-blue-200";
+            tileStyle =
+              "bg-blue-50 dark:bg-blue-950/30 border-blue-400 dark:border-blue-600 text-blue-900 dark:text-blue-200";
             bottomIndicator = (
               <div className="w-full bg-blue-600 dark:bg-blue-500 text-white flex items-center justify-center py-0.5 text-[9px] font-bold tracking-tight">
                 FEITA
               </div>
             );
           } else {
-            tileStyle = "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-blue-300 dark:hover:border-gray-500";
+            tileStyle =
+              "bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-blue-300 dark:hover:border-gray-500";
             bottomIndicator = (
               <div className="w-full bg-gray-100 dark:bg-gray-700/60 text-gray-400 dark:text-gray-400 flex items-center justify-center py-0.5 text-[9px]">
                 —
@@ -120,7 +129,9 @@ export default function NavegacaoQuestionario({
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-full shadow-xl font-bold text-sm transition-all"
         >
           <ListOrdered size={18} />
-          <span>Questões ({respondidasCount}/{totalQuestoes})</span>
+          <span>
+            Questões ({respondidasCount}/{totalQuestoes})
+          </span>
         </button>
       </div>
 
@@ -131,7 +142,8 @@ export default function NavegacaoQuestionario({
             <div>
               <div className="flex justify-between items-center pb-3 border-b dark:border-gray-700">
                 <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 text-base">
-                  <ListOrdered size={18} className="text-blue-500" /> Navegação do questionário
+                  <ListOrdered size={18} className="text-blue-500" /> Navegação
+                  do questionário
                 </h3>
                 <button
                   onClick={() => setMobileOpen(false)}
@@ -145,7 +157,9 @@ export default function NavegacaoQuestionario({
               <div className="my-4">
                 <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
                   <span>Progresso</span>
-                  <span>{porcentagem}% ({respondidasCount}/{totalQuestoes})</span>
+                  <span>
+                    {porcentagem}% ({respondidasCount}/{totalQuestoes})
+                  </span>
                 </div>
                 <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
@@ -182,7 +196,8 @@ export default function NavegacaoQuestionario({
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between pb-3 border-b dark:border-gray-700">
             <h3 className="font-bold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              <ListOrdered size={16} className="text-blue-500" /> Navegação do questionário
+              <ListOrdered size={16} className="text-blue-500" /> Navegação do
+              questionário
             </h3>
           </div>
 
