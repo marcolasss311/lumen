@@ -103,6 +103,7 @@ ${instrucaoFormato}`;
           if (cleanBase64.includes(",")) {
             cleanBase64 = cleanBase64.split(",")[1];
           }
+          cleanBase64 = cleanBase64.replace(/[\r\n\s]/g, "");
           parts.push({
             inlineData: {
               data: cleanBase64,
@@ -115,7 +116,12 @@ ${instrucaoFormato}`;
 
       console.log(`[Lumen IA] Gerando simulado a partir de material próprio (${materiais.length} arquivo(s), ${materialTexto ? "com texto" : "sem texto"})...`);
       const response = await generateWithFallback({
-        contents: parts,
+        contents: [
+          {
+            role: "user",
+            parts: parts,
+          },
+        ],
         config: {
           responseMimeType: "application/json",
         },
@@ -126,25 +132,41 @@ ${instrucaoFormato}`;
         questoesIA = JSON.parse(response.text);
       } catch (err) {
         console.error("Falha ao fazer parse do JSON do simulado com material:", response.text);
-        throw new Error("Erro de formatação da IA");
+        throw new Error("Erro de formatação da IA ao gerar as questões.");
       }
 
-      const materiaFinal =
-        materia || disciplina || curso || (nomesArquivos ? `Material: ${nomesArquivos.slice(0, 30)}` : "Material Próprio");
-      const topicoFinal = topico || (nomesArquivos ? nomesArquivos.slice(0, 50) : "Slides de Aula");
-      const anoEscolarFinal = ano_escolar || (nivel === "superior" ? "Ensino Superior" : "Geral");
+      const materiaFinal = (
+        materia || disciplina || curso || (nomesArquivos ? `Material: ${nomesArquivos}` : "Material Próprio")
+      ).slice(0, 95);
+      const topicoFinal = (
+        topico || (nomesArquivos ? nomesArquivos : "Slides de Aula")
+      ).slice(0, 145);
+      const anoEscolarFinal = (
+        ano_escolar || (nivel === "superior" ? "Ensino Superior" : "Geral")
+      ).slice(0, 45);
 
       const questoesSalvas = [];
       for (const q of questoesIA) {
-        const tipoReal = q.tipo_questao || tipo_questao;
+        let tipoReal = "Fechada";
+        if (q.tipo_questao === "Aberta" || (!q.alternativas && q.gabarito)) {
+          tipoReal = "Aberta";
+        } else if (q.tipo_questao === "Fechada" || (q.alternativas && q.alternativas.length > 0)) {
+          tipoReal = "Fechada";
+        } else if (tipo_questao === "Aberta") {
+          tipoReal = "Aberta";
+        } else {
+          tipoReal = "Fechada";
+        }
+
         const alts = q.alternativas ? JSON.stringify(q.alternativas) : null;
         const gab = q.gabarito || null;
-        const origemFinal =
+        const origemFinal = (
           q.origem && q.origem.trim()
             ? q.origem.trim()
             : nomesArquivos
-              ? `Slide: ${nomesArquivos.slice(0, 40)}`
-              : "Material de Aula";
+              ? `Slide: ${nomesArquivos}`
+              : "Material de Aula"
+        ).slice(0, 95);
 
         const insertRes = await db.query(
           `INSERT INTO questoes (materia, topico, ano_escolar_alvo, tipo_questao, pergunta, alternativas, gabarito, origem)
@@ -412,7 +434,7 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
     ) {
       return res.status(503).json({ error: "ALTA_DEMANDA" });
     }
-    return res.status(500).json({ error: "Erro interno ao gerar o simulado." });
+    return res.status(500).json({ error: error?.message || "Erro interno ao gerar o simulado." });
   }
 });
 

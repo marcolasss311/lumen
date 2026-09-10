@@ -139,7 +139,7 @@ function DashboardContent() {
         nome: file.name,
         tamanho: file.size,
         base64,
-        mimeType: file.type || (file.name.endsWith(".pdf") ? "application/pdf" : "text/plain"),
+        mimeType: file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "text/plain"),
       });
     }
 
@@ -333,12 +333,15 @@ function DashboardContent() {
       setFocusMode(true);
     } catch (error: any) {
       console.error("Erro ao gerar simulado", error);
+      const serverError = error.response?.data?.error;
       if (error.response && error.response.status === 503) {
         alert(
           "Os servidores da inteligência artificial estão com alta demanda no momento. Aguarde alguns segundos e tente novamente!",
         );
+      } else if (serverError) {
+        alert(`Não foi possível gerar o simulado: ${serverError}`);
       } else {
-        alert("Erro ao gerar simulado. O backend está rodando?");
+        alert("Erro ao gerar simulado. Verifique sua conexão e tente novamente.");
       }
     } finally {
       setGerando(false);

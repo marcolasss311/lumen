@@ -67,6 +67,15 @@ async function runMigrations() {
             `);
     }
 
+    // Expandir colunas da tabela questoes para suportar materiais e tópicos mais longos
+    try {
+      await db.query(`ALTER TABLE questoes ALTER COLUMN materia TYPE VARCHAR(255);`);
+      await db.query(`ALTER TABLE questoes ALTER COLUMN topico TYPE VARCHAR(255);`);
+      await db.query(`ALTER TABLE questoes ALTER COLUMN origem TYPE VARCHAR(255);`);
+    } catch (colErr) {
+      console.warn("Aviso na expansão de colunas em questoes:", colErr.message);
+    }
+
     // Garante que o banco contenha questões oficiais de vestibular
     const checkOficiais = await db.query(
       "SELECT COUNT(*) FROM questoes WHERE origem != 'IA'",

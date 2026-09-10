@@ -2,12 +2,12 @@ const { GoogleGenAI } = require("@google/genai");
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Modelos oficiais ativos da geração 3.x recomendados pela API do Google
+// Modelos oficiais ativos recomendados pela API do Google
 const MODEL_FALLBACK_CHAIN = [
-  "gemini-3.6-flash",
+  "gemini-2.5-flash",
   "gemini-3.7-flash",
   "gemini-3.5-flash-lite",
-  "gemini-3.1-pro-preview",
+  "gemini-2.5-pro",
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
