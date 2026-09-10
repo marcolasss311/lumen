@@ -13,25 +13,61 @@ router.post('/gerar', authMiddleware, async (req, res) => {
 
         let orderByClause = priorizar_oficiais ? `ORDER BY CASE WHEN origem != 'IA' THEN 0 ELSE 1 END, RANDOM()` : `ORDER BY RANDOM()`;
 
-        let dbResult;
-        if (tipo_questao === 'Mesclada') {
-             // Busca qualquer tipo
-             dbResult = await db.query(
-                `SELECT * FROM questoes 
-                 WHERE materia = $1 AND topico = $2 AND ano_escolar_alvo = $3
-                 ${orderByClause}
-                 LIMIT $4`,
-                [materia, topico, ano_escolar, quantidade]
-            );
-        } else {
-             dbResult = await db.query(
-                `SELECT * FROM questoes 
-                 WHERE materia = $1 AND topico = $2 AND ano_escolar_alvo = $3 AND tipo_questao = $4
-                 ${orderByClause}
-                 LIMIT $5`,
-                [materia, topico, ano_escolar, tipo_questao, quantidade]
-            );
+        let whereConditions = [];
+        let queryParams = [];
+
+        // Filtro flexível por matéria
+        if (materia) {
+            const materiasArray = materia.split(',').map(m => m.trim()).filter(Boolean);
+            if (materiasArray.length === 1) {
+                queryParams.push(`%${materiasArray[0]}%`);
+                whereConditions.push(`materia ILIKE $${queryParams.length}`);
+            } else if (materiasArray.length > 1) {
+                const orClauses = materiasArray.map(mat => {
+                    queryParams.push(`%${mat}%`);
+                    return `materia ILIKE $${queryParams.length}`;
+                });
+                whereConditions.push(`(${orClauses.join(' OR ')})`);
+            }
         }
+
+        // Filtro por tópico (apenas se for específico, ignorando "Geral")
+        if (topico && topico.trim() && topico.trim().toLowerCase() !== 'geral') {
+            const topicosArray = topico.split(',').map(t => t.trim()).filter(Boolean);
+            if (topicosArray.length === 1) {
+                queryParams.push(`%${topicosArray[0]}%`);
+                whereConditions.push(`topico ILIKE $${queryParams.length}`);
+            } else if (topicosArray.length > 1) {
+                const orClauses = topicosArray.map(top => {
+                    queryParams.push(`%${top}%`);
+                    return `topico ILIKE $${queryParams.length}`;
+                });
+                whereConditions.push(`(${orClauses.join(' OR ')})`);
+            }
+        }
+
+        // Filtro por série/ano escolar
+        if (ano_escolar && ano_escolar !== 'Ensino Superior') {
+            queryParams.push(ano_escolar);
+            whereConditions.push(`(ano_escolar_alvo = $${queryParams.length} OR ano_escolar_alvo = 'Pré-Vestibular/ENEM')`);
+        }
+
+        if (tipo_questao !== 'Mesclada') {
+            queryParams.push(tipo_questao);
+            whereConditions.push(`tipo_questao = $${queryParams.length}`);
+        }
+
+        const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+        queryParams.push(quantidade);
+        const limitParamIndex = queryParams.length;
+
+        const dbResult = await db.query(
+            `SELECT * FROM questoes 
+             ${whereClause}
+             ${orderByClause}
+             LIMIT $${limitParamIndex}`,
+            queryParams
+        );
 
         let questoes = dbResult.rows;
 
@@ -42,10 +78,13 @@ router.post('/gerar', authMiddleware, async (req, res) => {
             let prompt = "";
 
             const regraTabelas = `TABELAS E DADOS: Sempre que a interpretação da questão depender de comparação de dados, propriedades químicas/físicas, experimentos, estatísticas, cronologias ou tabelas-verdade, inclua a tabela diretamente no texto da pergunta formatada em Markdown padrão (com barras verticais | e separador |--|--|).`;
+            const regraOficiais = priorizar_oficiais
+                ? `BANCA E ORIGEM DAS QUESTÕES: O usuário marcou "Priorizar Questões Oficiais". Portanto, busque em sua base de dados e transcreva questões REAIS e AUTÊNTICAS de vestibulares e exames oficiais conhecidos (como ENEM, FUVEST, UNICAMP, UNESP, UERJ, ENADE, etc.). No campo "origem" de cada questão, indique obrigatoriamente a banca e ano de aplicação real (ex: "ENEM 2022", "FUVEST 2021", "UNICAMP 2020"). Se e somente se não encontrar nenhuma questão oficial sobre o tema, gere uma questão inédita e defina "origem": "IA".`
+                : `No campo "origem" de cada questão, preencha com "IA".`;
 
             if (isSuperior) {
                 // Prompt especializado para Nível Superior / Graduação
-                const cabecalhoSuperior = `Você é um professor universitário e avaliador acadêmico do curso de "${curso || 'Graduação'}". Elabore questões de nível de Ensino Superior sobre a disciplina "${disciplina || materia}", abordando os tópicos "${topico}". NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Utilize rigor técnico, conceitual e metodológico típico de avaliações universitárias.\n${regraTabelas}`;
+                const cabecalhoSuperior = `Você é um professor universitário e avaliador acadêmico do curso de "${curso || 'Graduação'}". Elabore questões de nível de Ensino Superior sobre a disciplina "${disciplina || materia}", abordando os tópicos "${topico}". NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Utilize rigor técnico, conceitual e metodológico típico de avaliações universitárias.\n${regraTabelas}\n${regraOficiais}`;
 
                 if (tipo_questao === 'Fechada') {
                     prompt = `${cabecalhoSuperior}
@@ -54,6 +93,7 @@ IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (com
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
   {
+    "origem": "ENADE 2021",
     "pergunta": "Texto da pergunta",
     "alternativas": [
       { "letra": "A", "texto": "...", "correta": false, "explicacao": "Por que esta está errada..." },
@@ -68,6 +108,7 @@ IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (com
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
   {
+    "origem": "ENADE 2019",
     "pergunta": "Texto do problema ou questão dissertativa acadêmica",
     "gabarito": "Padrão de resposta detalhado com critérios de pontuação esperados do graduando."
   }
@@ -80,11 +121,13 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
 [
   {
     "tipo_questao": "Fechada",
+    "origem": "ENADE 2021",
     "pergunta": "Texto da pergunta",
     "alternativas": [ { "letra": "A", "texto": "...", "correta": true, "explicacao": null } ]
   },
   {
     "tipo_questao": "Aberta",
+    "origem": "ENADE 2019",
     "pergunta": "Texto da pergunta dissertativa",
     "gabarito": "Resposta esperada"
   }
@@ -96,10 +139,12 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
                     prompt = `Gere ${questoesFaltantes} questões de múltipla escolha sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
 ${regraTabelas}
+${regraOficiais}
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
   {
+    "origem": "ENEM 2022",
     "pergunta": "Texto da pergunta",
     "alternativas": [
       { "letra": "A", "texto": "...", "correta": false, "explicacao": "Por que esta está errada..." },
@@ -111,10 +156,12 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
                     prompt = `Gere ${questoesFaltantes} questões discursivas (abertas) sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
 ${regraTabelas}
+${regraOficiais}
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
 [
   {
+    "origem": "FUVEST 2021",
     "pergunta": "Texto da pergunta dissertativa",
     "gabarito": "Padrão de resposta detalhado esperado do aluno (será usado posteriormente para corrigir)."
   }
@@ -123,17 +170,20 @@ Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
                     prompt = `Gere ${questoesFaltantes} questões mistas sobre os tópicos "${topico}" da(s) matéria(s) "${materia}" para o nível "${ano_escolar}", com foco no padrão "${foco}".
 NÍVEL DE DIFICULDADE DESEJADO: ${dificuldade}. Adapte a complexidade dos conceitos, textos e "pegadinhas" de acordo com esta exigência.
 ${regraTabelas}
+${regraOficiais}
 Metade deve ser de múltipla escolha e a outra metade discursiva.
 IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
 Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao" ("Fechada" ou "Aberta"):
 [
   {
     "tipo_questao": "Fechada",
+    "origem": "ENEM 2022",
     "pergunta": "Texto da pergunta",
     "alternativas": [ { "letra": "A", "texto": "...", "correta": true, "explicacao": null } ]
   },
   {
     "tipo_questao": "Aberta",
+    "origem": "FUVEST 2020",
     "pergunta": "Texto da pergunta dissertativa",
     "gabarito": "Resposta esperada"
   }
@@ -162,11 +212,12 @@ Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao"
                 const tipoReal = q.tipo_questao || tipo_questao;
                 const alts = q.alternativas ? JSON.stringify(q.alternativas) : null;
                 const gab = q.gabarito || null;
+                const origemFinal = q.origem && q.origem.trim() ? q.origem.trim() : (priorizar_oficiais ? 'ENEM' : 'IA');
                 
                 const insertRes = await db.query(
                     `INSERT INTO questoes (materia, topico, ano_escolar_alvo, tipo_questao, pergunta, alternativas, gabarito, origem)
                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-                    [materia, topico, ano_escolar, tipoReal, q.pergunta, alts, gab, 'IA']
+                    [materia, topico, ano_escolar, tipoReal, q.pergunta, alts, gab, origemFinal]
                 );
                 idsGerados.push(insertRes.rows[0]);
             }
