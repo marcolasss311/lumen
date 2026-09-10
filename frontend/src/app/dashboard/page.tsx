@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Eye, EyeOff, Maximize, Minimize, Plus, X, Printer, BarChart2, Home as HomeIcon, RotateCcw } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
+import NavegacaoQuestionario from "@/components/NavegacaoQuestionario";
 import Link from "next/link";
 
 function DashboardContent() {
@@ -248,6 +249,20 @@ function DashboardContent() {
   const itensPorPagina = 3;
   const totalPaginas = Math.ceil(questoes.length / itensPorPagina);
   const paginatedQuestoes = questoes.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
+
+  const handleIrParaQuestao = (index: number) => {
+    const pageOfQuestao = Math.floor(index / itensPorPagina) + 1;
+    setPaginaAtual(pageOfQuestao);
+    const questao = questoes[index];
+    if (questao) {
+      setTimeout(() => {
+        const el = document.getElementById(`questao-card-${questao.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 100);
+    }
+  };
 
   if (loading) return <div className="p-8 text-black">Carregando...</div>;
   if (!user) return null;
@@ -542,155 +557,173 @@ function DashboardContent() {
         </div>
         )}
 
-        <div className={focusMode ? "md:col-span-4 flex justify-center" : "md:col-span-3 flex justify-center"}>
+        <div className={focusMode ? "md:col-span-4" : "md:col-span-3"}>
           {questoes.length > 0 ? (
-            <div className="w-full max-w-4xl space-y-6">
-              {/* Cabeçalho do Caderno de Questões (Padrão PDF / Documento) */}
-              <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-wrap justify-between items-center gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs uppercase tracking-wider font-bold px-2.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
-                      Caderno de Questões
-                    </span>
-                    {nomeSimuladoCustom && (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
-                        {nomeSimuladoCustom}
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
-                    {nomeSimuladoCustom || (nivelSegmento === 'superior' ? (disciplina || curso || 'Graduação') : (modoMateria === 'Única' ? materiaUnica : materiasMultiplas.join(', ')))}
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Total: {questoes.length} questões • Respondidas: {Object.keys(respostas).length}/{questoes.length}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => {
-                      if (confirm("Deseja fechar este simulado e iniciar um novo?")) {
-                        setQuestoes([]);
-                        setRespostas({});
-                        setResultados(null);
-                        setSimuladoFinalizado(false);
-                        setNotaGeral(null);
-                        setNomeSimuladoCustom(null);
-                        localStorage.removeItem("@lumen:simuladoAtivo");
-                      }
-                    }}
-                    className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 font-medium px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
-                    title="Descartar e criar novo simulado"
-                  >
-                    <RotateCcw size={14} /> Novo Simulado
-                  </button>
-
-                  <button 
-                    onClick={() => handlePrint()}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3.5 py-2 rounded-lg transition-colors text-sm font-medium shadow-xs"
-                  >
-                    <Printer size={16} />
-                    Exportar PDF
-                  </button>
-                </div>
-              </div>
-
-              {simuladoFinalizado && notaGeral !== null && (
-                <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4 shadow-sm">
+            <div className="flex flex-col xl:flex-row gap-6 justify-center items-start w-full">
+              {/* Espaço Principal da Prova (Padrão PDF / Folha) */}
+              <div className="w-full max-w-4xl space-y-6 flex-1">
+                {/* Cabeçalho do Caderno de Questões (Padrão PDF / Documento) */}
+                <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-wrap justify-between items-center gap-4">
                   <div>
-                    <h2 className="text-xl font-bold text-blue-800 dark:text-blue-300">Simulado Finalizado!</h2>
-                    <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">Veja seus erros e acertos abaixo.</p>
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <button
-                        onClick={() => {
-                          let novoNome = nomeSimuladoCustom || (nivelSegmento === 'superior' ? (disciplina || curso || 'Graduação') : (modoMateria === 'Única' ? materiaUnica : materiasMultiplas.join(', ')));
-                          if (!novoNome.includes("(Nova Tentativa)")) {
-                            novoNome = `${novoNome} (Nova Tentativa)`;
-                          }
-                          setNomeSimuladoCustom(novoNome);
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs uppercase tracking-wider font-bold px-2.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                        Caderno de Questões
+                      </span>
+                      {nomeSimuladoCustom && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                          {nomeSimuladoCustom}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
+                      {nomeSimuladoCustom || (nivelSegmento === 'superior' ? (disciplina || curso || 'Graduação') : (modoMateria === 'Única' ? materiaUnica : materiasMultiplas.join(', ')))}
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Total: {questoes.length} questões • Respondidas: {Object.keys(respostas).length}/{questoes.length}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => {
+                        if (confirm("Deseja fechar este simulado e iniciar um novo?")) {
+                          setQuestoes([]);
                           setRespostas({});
                           setResultados(null);
                           setSimuladoFinalizado(false);
                           setNotaGeral(null);
-                          setPaginaAtual(1);
-                        }}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all"
-                      >
-                        <RotateCcw size={16} /> Refazer Este Simulado
-                      </button>
-                      <Link
-                        href="/desempenho"
-                        className="flex items-center gap-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold border border-gray-200 dark:border-gray-700 transition-all shadow-xs"
-                      >
-                        <BarChart2 size={16} /> Ver no Histórico
-                      </Link>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-3xl font-black text-blue-700 dark:text-blue-400">{notaGeral.toFixed(0)}<span className="text-lg">/100</span></div>
-                    <div className="text-xs text-blue-600 dark:text-blue-500 uppercase tracking-wider font-bold">Nota Geral</div>
+                          setNomeSimuladoCustom(null);
+                          localStorage.removeItem("@lumen:simuladoAtivo");
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 font-medium px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+                      title="Descartar e criar novo simulado"
+                    >
+                      <RotateCcw size={14} /> Novo Simulado
+                    </button>
+
+                    <button 
+                      onClick={() => handlePrint()}
+                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3.5 py-2 rounded-lg transition-colors text-sm font-medium shadow-xs"
+                    >
+                      <Printer size={16} />
+                      Exportar PDF
+                    </button>
                   </div>
                 </div>
-              )}
 
-              {paginatedQuestoes.map((q, idx) => {
-                const globalIndex = (paginaAtual - 1) * itensPorPagina + idx + 1;
-                const feedback = resultados?.find(r => r.questao_id === q.id);
-
-                return q.tipo_questao === 'Aberta' ? (
-                  <RenderizadorDiscursiva 
-                    key={q.id} 
-                    questao={q} 
-                    index={globalIndex} 
-                    modo={simuladoFinalizado ? 'feedback' : 'prova'}
-                    respostaSelecionada={respostas[q.id] || null}
-                    onResponder={(resp) => setRespostas({ ...respostas, [q.id]: resp })}
-                    feedback={feedback}
-                  />
-                ) : (
-                  <RenderizadorSimulado 
-                    key={q.id} 
-                    questao={q} 
-                    index={globalIndex} 
-                    modo={simuladoFinalizado ? 'feedback' : 'prova'}
-                    respostaSelecionada={respostas[q.id] || null}
-                    onResponder={(resp) => setRespostas({ ...respostas, [q.id]: resp })}
-                    feedback={feedback}
-                  />
-                )
-              })}
-
-              <div className="flex justify-between items-center mt-6 pt-6 border-t dark:border-gray-700">
-                <button 
-                  onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
-                  disabled={paginaAtual === 1}
-                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg disabled:opacity-50 text-black dark:text-white font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                >
-                  Anterior
-                </button>
-                <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">
-                  Página {paginaAtual} de {totalPaginas}
-                </span>
-                
-                {paginaAtual < totalPaginas ? (
-                  <button 
-                    onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
-                    className="px-4 py-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-700 dark:text-blue-300 font-medium hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                  >
-                    Próxima
-                  </button>
-                ) : !simuladoFinalizado ? (
-                  <button 
-                    onClick={finalizarSimulado}
-                    disabled={finalizando || Object.keys(respostas).length < questoes.length}
-                    className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
-                  >
-                    {finalizando ? "Corrigindo IA..." : "Finalizar Simulado"}
-                  </button>
-                ) : (
-                  <div className="text-green-600 dark:text-green-400 font-bold">✓ Concluído</div>
+                {simuladoFinalizado && notaGeral !== null && (
+                  <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4 shadow-sm">
+                    <div>
+                      <h2 className="text-xl font-bold text-blue-800 dark:text-blue-300">Simulado Finalizado!</h2>
+                      <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">Veja seus erros e acertos abaixo.</p>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                          onClick={() => {
+                            let novoNome = nomeSimuladoCustom || (nivelSegmento === 'superior' ? (disciplina || curso || 'Graduação') : (modoMateria === 'Única' ? materiaUnica : materiasMultiplas.join(', ')));
+                            if (!novoNome.includes("(Nova Tentativa)")) {
+                              novoNome = `${novoNome} (Nova Tentativa)`;
+                            }
+                            setNomeSimuladoCustom(novoNome);
+                            setRespostas({});
+                            setResultados(null);
+                            setSimuladoFinalizado(false);
+                            setNotaGeral(null);
+                            setPaginaAtual(1);
+                          }}
+                          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all"
+                        >
+                          <RotateCcw size={16} /> Refazer Este Simulado
+                        </button>
+                        <Link
+                          href="/desempenho"
+                          className="flex items-center gap-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold border border-gray-200 dark:border-gray-700 transition-all shadow-xs"
+                        >
+                          <BarChart2 size={16} /> Ver no Histórico
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-3xl font-black text-blue-700 dark:text-blue-400">{notaGeral.toFixed(0)}<span className="text-lg">/100</span></div>
+                      <div className="text-xs text-blue-600 dark:text-blue-500 uppercase tracking-wider font-bold">Nota Geral</div>
+                    </div>
+                  </div>
                 )}
+
+                {paginatedQuestoes.map((q, idx) => {
+                  const globalIndex = (paginaAtual - 1) * itensPorPagina + idx + 1;
+                  const feedback = resultados?.find(r => r.questao_id === q.id);
+
+                  return (
+                    <div key={q.id} id={`questao-card-${q.id}`}>
+                      {q.tipo_questao === 'Aberta' ? (
+                        <RenderizadorDiscursiva 
+                          questao={q} 
+                          index={globalIndex} 
+                          modo={simuladoFinalizado ? 'feedback' : 'prova'}
+                          respostaSelecionada={respostas[q.id] || null}
+                          onResponder={(resp) => setRespostas({ ...respostas, [q.id]: resp })}
+                          feedback={feedback}
+                        />
+                      ) : (
+                        <RenderizadorSimulado 
+                          questao={q} 
+                          index={globalIndex} 
+                          modo={simuladoFinalizado ? 'feedback' : 'prova'}
+                          respostaSelecionada={respostas[q.id] || null}
+                          onResponder={(resp) => setRespostas({ ...respostas, [q.id]: resp })}
+                          feedback={feedback}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div className="flex justify-between items-center mt-6 pt-6 border-t dark:border-gray-700">
+                  <button 
+                    onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
+                    disabled={paginaAtual === 1}
+                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg disabled:opacity-50 text-black dark:text-white font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Anterior
+                  </button>
+                  <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">
+                    Página {paginaAtual} de {totalPaginas}
+                  </span>
+                  
+                  {paginaAtual < totalPaginas ? (
+                    <button 
+                      onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
+                      className="px-4 py-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-700 dark:text-blue-300 font-medium hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                    >
+                      Próxima
+                    </button>
+                  ) : !simuladoFinalizado ? (
+                    <button 
+                      onClick={finalizarSimulado}
+                      disabled={finalizando || Object.keys(respostas).length < questoes.length}
+                      className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
+                    >
+                      {finalizando ? "Corrigindo IA..." : "Finalizar Simulado"}
+                    </button>
+                  ) : (
+                    <div className="text-green-600 dark:text-green-400 font-bold">✓ Concluído</div>
+                  )}
+                </div>
               </div>
+
+              {/* Balão / Painel de Navegação Lateral (Estilo Moodle) */}
+              <NavegacaoQuestionario
+                questoes={questoes}
+                respostas={respostas}
+                resultados={resultados}
+                simuladoFinalizado={simuladoFinalizado}
+                paginaAtual={paginaAtual}
+                itensPorPagina={itensPorPagina}
+                onIrParaQuestao={handleIrParaQuestao}
+                onFinalizar={finalizarSimulado}
+                finalizando={finalizando}
+              />
             </div>
           ) : (
             <div className="bg-white dark:bg-gray-800 p-12 text-center rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 w-full">
