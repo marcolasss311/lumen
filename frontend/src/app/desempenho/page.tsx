@@ -260,10 +260,10 @@ export default function Desempenho() {
                               e.stopPropagation();
                               await carregarEDepoisRefazer(h.id);
                             }}
-                            className="p-2 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                            title="Refazer este simulado"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white dark:bg-blue-900/40 dark:hover:bg-blue-600 dark:text-blue-300 dark:hover:text-white rounded-lg border border-blue-200 dark:border-blue-800 transition-all shadow-xs"
+                            title="Refazer este simulado com as mesmas questões"
                           >
-                            <RotateCcw size={18} />
+                            <RotateCcw size={14} /> Refazer
                           </button>
                         </div>
                       </div>

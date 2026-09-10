@@ -596,10 +596,35 @@ function DashboardContent() {
               </div>
 
               {simuladoFinalizado && notaGeral !== null && (
-                <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-2xl flex justify-between items-center shadow-sm">
+                <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4 shadow-sm">
                   <div>
                     <h2 className="text-xl font-bold text-blue-800 dark:text-blue-300">Simulado Finalizado!</h2>
                     <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">Veja seus erros e acertos abaixo.</p>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={() => {
+                          let novoNome = nomeSimuladoCustom || (nivelSegmento === 'superior' ? (disciplina || curso || 'Graduação') : (modoMateria === 'Única' ? materiaUnica : materiasMultiplas.join(', ')));
+                          if (!novoNome.includes("(Nova Tentativa)")) {
+                            novoNome = `${novoNome} (Nova Tentativa)`;
+                          }
+                          setNomeSimuladoCustom(novoNome);
+                          setRespostas({});
+                          setResultados(null);
+                          setSimuladoFinalizado(false);
+                          setNotaGeral(null);
+                          setPaginaAtual(1);
+                        }}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all"
+                      >
+                        <RotateCcw size={16} /> Refazer Este Simulado
+                      </button>
+                      <Link
+                        href="/desempenho"
+                        className="flex items-center gap-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold border border-gray-200 dark:border-gray-700 transition-all shadow-xs"
+                      >
+                        <BarChart2 size={16} /> Ver no Histórico
+                      </Link>
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-black text-blue-700 dark:text-blue-400">{notaGeral.toFixed(0)}<span className="text-lg">/100</span></div>
