@@ -19,7 +19,143 @@ router.post("/gerar", authMiddleware, async (req, res) => {
       nivel = "medio",
       curso = null,
       disciplina = null,
+      materiais_arquivos = [],
+      material_arquivo = null,
+      material_texto = null,
     } = req.body;
+
+    // -------------------------------------------------------------
+    // FLUXO ESPECIALIZADO: Simulado com Material Próprio (PDF / Slides / Anotações)
+    // -------------------------------------------------------------
+    const materiais = Array.isArray(materiais_arquivos) && materiais_arquivos.length > 0
+      ? materiais_arquivos
+      : material_arquivo
+        ? [material_arquivo]
+        : [];
+    const materialTexto = typeof material_texto === "string" ? material_texto.trim() : "";
+
+    if (materiais.length > 0 || materialTexto) {
+      const nomesArquivos = materiais.map((m) => m.nome).filter(Boolean).join(", ");
+      const regraTabelas = `TABELAS E DADOS: Sempre que a interpretação da questão depender de comparação de dados, propriedades, experimentos, estatísticas, cronologias ou tabelas-verdade, inclua a tabela diretamente no texto da pergunta formatada em Markdown padrão (com barras verticais | e separador |--|--|).`;
+
+      let instrucaoFormato = "";
+      if (tipo_questao === "Fechada") {
+        instrucaoFormato = `Gere ${quantidade} questões de múltipla escolha.
+IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
+Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
+[
+  {
+    "origem": "${nomesArquivos ? nomesArquivos.slice(0, 40) : "Material de Aula"}",
+    "pergunta": "Texto da pergunta",
+    "alternativas": [
+      { "letra": "A", "texto": "...", "correta": false, "explicacao": "Por que esta está incorreta..." },
+      { "letra": "B", "texto": "...", "correta": true, "explicacao": null }
+    ]
+  }
+]`;
+      } else if (tipo_questao === "Aberta") {
+        instrucaoFormato = `Gere ${quantidade} questões discursivas (abertas).
+IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
+Retorne ESTRITAMENTE um array JSON com a seguinte estrutura:
+[
+  {
+    "origem": "${nomesArquivos ? nomesArquivos.slice(0, 40) : "Material de Aula"}",
+    "pergunta": "Texto da pergunta dissertativa",
+    "gabarito": "Padrão de resposta detalhado com critérios de pontuação esperados do aluno com base estrita no material."
+  }
+]`;
+      } else {
+        instrucaoFormato = `Gere ${quantidade} questões mistas (metade de múltipla escolha e metade discursiva).
+IMPORTANTE: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc). Escreva todas as fórmulas em texto plano (ex: pH = -log10[H+], x^2).
+Retorne ESTRITAMENTE um array JSON. Cada objeto deve ter um campo "tipo_questao" ("Fechada" ou "Aberta"):
+[
+  {
+    "tipo_questao": "Fechada",
+    "origem": "${nomesArquivos ? nomesArquivos.slice(0, 40) : "Material de Aula"}",
+    "pergunta": "Texto da pergunta",
+    "alternativas": [ { "letra": "A", "texto": "...", "correta": true, "explicacao": null } ]
+  },
+  {
+    "tipo_questao": "Aberta",
+    "origem": "${nomesArquivos ? nomesArquivos.slice(0, 40) : "Material de Aula"}",
+    "pergunta": "Texto da pergunta dissertativa",
+    "gabarito": "Resposta esperada"
+  }
+]`;
+      }
+
+      const promptTexto = `Você é um professor e avaliador acadêmico especialista.
+O aluno forneceu ${materiais.length > 0 ? `${materiais.length} arquivo(s) de aula/slides` : ""}${materiais.length > 0 && materialTexto ? " e " : ""}${materialTexto ? "anotações de estudo" : ""} ${nomesArquivos ? `(Arquivos: ${nomesArquivos})` : ""}.
+
+DIRETRIZES CRÍTICAS:
+1. FIDELIDADE AO MATERIAL: As perguntas devem ser formuladas com base ESTRITAMENTE nos conceitos, definições, teorias, nomes de autores/pesquisadores, comparações, arquiteturas, diagramas, códigos, tabelas e exemplos presentes no material fornecido.
+2. Não cobre conteúdos externos que não tenham sido mencionados ou fundamentados no material.
+3. DIFICULDADE: ${dificuldade}. Crie questões inteligentes, com contextos bem formulados e alternativas plausíveis (evite pegadinhas óbvias; teste a compreensão real dos conceitos da aula).
+${regraTabelas}
+
+${materialTexto ? `=== ANOTAÇÕES / TEXTO COMPLEMENTAR DO ALUNO ===\n${materialTexto}\n=== FIM DAS ANOTAÇÕES ===\n` : ""}
+${instrucaoFormato}`;
+
+      const parts = [];
+      for (const arq of materiais) {
+        if (arq.base64) {
+          let cleanBase64 = arq.base64;
+          if (cleanBase64.includes(",")) {
+            cleanBase64 = cleanBase64.split(",")[1];
+          }
+          parts.push({
+            inlineData: {
+              data: cleanBase64,
+              mimeType: arq.mimeType || "application/pdf",
+            },
+          });
+        }
+      }
+      parts.push({ text: promptTexto });
+
+      console.log(`[Lumen IA] Gerando simulado a partir de material próprio (${materiais.length} arquivo(s), ${materialTexto ? "com texto" : "sem texto"})...`);
+      const response = await generateWithFallback({
+        contents: parts,
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      let questoesIA;
+      try {
+        questoesIA = JSON.parse(response.text);
+      } catch (err) {
+        console.error("Falha ao fazer parse do JSON do simulado com material:", response.text);
+        throw new Error("Erro de formatação da IA");
+      }
+
+      const materiaFinal =
+        materia || disciplina || curso || (nomesArquivos ? `Material: ${nomesArquivos.slice(0, 30)}` : "Material Próprio");
+      const topicoFinal = topico || (nomesArquivos ? nomesArquivos.slice(0, 50) : "Slides de Aula");
+      const anoEscolarFinal = ano_escolar || (nivel === "superior" ? "Ensino Superior" : "Geral");
+
+      const questoesSalvas = [];
+      for (const q of questoesIA) {
+        const tipoReal = q.tipo_questao || tipo_questao;
+        const alts = q.alternativas ? JSON.stringify(q.alternativas) : null;
+        const gab = q.gabarito || null;
+        const origemFinal =
+          q.origem && q.origem.trim()
+            ? q.origem.trim()
+            : nomesArquivos
+              ? `Slide: ${nomesArquivos.slice(0, 40)}`
+              : "Material de Aula";
+
+        const insertRes = await db.query(
+          `INSERT INTO questoes (materia, topico, ano_escolar_alvo, tipo_questao, pergunta, alternativas, gabarito, origem)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+          [materiaFinal, topicoFinal, anoEscolarFinal, tipoReal, q.pergunta, alts, gab, origemFinal],
+        );
+        questoesSalvas.push(insertRes.rows[0]);
+      }
+
+      return res.json({ questoes: questoesSalvas });
+    }
 
     const isSuperior = nivel === "superior" || Boolean(curso);
 
