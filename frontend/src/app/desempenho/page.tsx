@@ -34,10 +34,11 @@ import { useReactToPrint } from "react-to-print";
 import { Printer } from "lucide-react";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
 import TextoComTabela from "@/components/TextoComTabela";
+import LoadingScreen from "@/components/LoadingScreen";
 import { useRef } from "react";
 
 export default function Desempenho() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => auth.currentUser);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any[]>([]);
   const [historico, setHistorico] = useState<any[]>([]);
@@ -192,7 +193,7 @@ export default function Desempenho() {
   }, [router]);
 
   if (loading)
-    return <div className="p-8 text-black dark:text-white">Carregando...</div>;
+    return <LoadingScreen text="Carregando estatísticas e desempenho..." />;
   if (!user) return null;
 
   return (
@@ -410,8 +411,9 @@ export default function Desempenho() {
 
                 <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                   {carregandoDetalhes ? (
-                    <div className="text-center py-10 text-gray-500">
-                      Carregando detalhes...
+                    <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-500">
+                      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm">Carregando detalhes do simulado...</p>
                     </div>
                   ) : (
                     simuladoAtivo.questoes.map((q: any, idx: number) => (

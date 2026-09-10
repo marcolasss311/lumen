@@ -23,11 +23,12 @@ import {
 import { useReactToPrint } from "react-to-print";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
 import NavegacaoQuestionario from "@/components/NavegacaoQuestionario";
+import LoadingScreen from "@/components/LoadingScreen";
 import Link from "next/link";
 
 function DashboardContent() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => auth.currentUser);
+  const [loading, setLoading] = useState(() => !auth.currentUser);
   const router = useRouter();
   const searchParams = useSearchParams();
   const paramNivel = searchParams.get("nivel");
@@ -308,7 +309,7 @@ function DashboardContent() {
     }
   };
 
-  if (loading) return <div className="p-8 text-black">Carregando...</div>;
+  if (loading) return <LoadingScreen text="Carregando painel..." />;
   if (!user) return null;
 
   return (
@@ -943,13 +944,7 @@ function DashboardContent() {
 
 export default function Dashboard() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center dark:bg-gray-900 text-gray-500">
-          Carregando painel...
-        </div>
-      }
-    >
+    <Suspense fallback={<LoadingScreen text="Carregando painel..." />}>
       <DashboardContent />
     </Suspense>
   );

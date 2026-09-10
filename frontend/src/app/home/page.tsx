@@ -17,9 +17,11 @@ import {
   X,
 } from "lucide-react";
 
+import LoadingScreen from "@/components/LoadingScreen";
+
 export default function Home() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => auth.currentUser);
+  const [loading, setLoading] = useState(() => !auth.currentUser);
   const [showNivelModal, setShowNivelModal] = useState(false);
   const router = useRouter();
 
@@ -35,12 +37,7 @@ export default function Home() {
     return () => unsubscribe();
   }, [router]);
 
-  if (loading)
-    return (
-      <div className="min-h-screen flex items-center justify-center dark:bg-gray-900">
-        <p className="text-gray-500">Carregando...</p>
-      </div>
-    );
+  if (loading) return <LoadingScreen text="Carregando início..." />;
   if (!user) return null;
 
   const firstName = user.displayName?.split(" ")[0] || "Estudante";
