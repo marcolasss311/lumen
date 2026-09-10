@@ -57,6 +57,8 @@ router.get('/simulado/:id', authMiddleware, async (req, res) => {
         const historyQuery = `
             SELECT 
                 h.id as historico_id,
+                q.id,
+                q.origem,
                 q.materia,
                 q.topico,
                 q.pergunta,

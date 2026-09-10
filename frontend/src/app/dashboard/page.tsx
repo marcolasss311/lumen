@@ -8,7 +8,7 @@ import RenderizadorSimulado from "@/components/RenderizadorSimulado";
 import RenderizadorDiscursiva from "@/components/RenderizadorDiscursiva";
 import axios from "axios";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Eye, EyeOff, Maximize, Minimize, Plus, X, Printer, BarChart2, Home as HomeIcon } from "lucide-react";
+import { Eye, EyeOff, Maximize, Minimize, Plus, X, Printer, BarChart2, Home as HomeIcon, RotateCcw } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
 import Link from "next/link";
@@ -44,6 +44,7 @@ function DashboardContent() {
   const [simuladoFinalizado, setSimuladoFinalizado] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
   const [notaGeral, setNotaGeral] = useState<number | null>(null);
+  const [nomeSimuladoCustom, setNomeSimuladoCustom] = useState<string | null>(null);
   
   const [showEmail, setShowEmail] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -92,6 +93,7 @@ function DashboardContent() {
           setPaginaAtual(parsed.paginaAtual || 1);
           setSimuladoFinalizado(parsed.simuladoFinalizado || false);
           setNotaGeral(parsed.notaGeral || null);
+          if (parsed.nomeSimuladoCustom) setNomeSimuladoCustom(parsed.nomeSimuladoCustom);
         }
       } catch (e) {
         console.error("Erro ao carregar simulado salvo", e);
@@ -108,12 +110,13 @@ function DashboardContent() {
         resultados,
         paginaAtual,
         simuladoFinalizado,
-        notaGeral
+        notaGeral,
+        nomeSimuladoCustom
       }));
     } else {
       localStorage.removeItem("@lumen:simuladoAtivo");
     }
-  }, [questoes, respostas, resultados, paginaAtual, simuladoFinalizado, notaGeral]);
+  }, [questoes, respostas, resultados, paginaAtual, simuladoFinalizado, notaGeral, nomeSimuladoCustom]);
 
   const gerarSimulado = async () => {
     if (!user) return;
@@ -144,6 +147,7 @@ function DashboardContent() {
     setPaginaAtual(1);
     setSimuladoFinalizado(false);
     setNotaGeral(null);
+    setNomeSimuladoCustom(null);
 
     try {
       const token = await user.getIdToken();
@@ -213,8 +217,12 @@ function DashboardContent() {
         }
       });
 
+      const defaultNome = nivelSegmento === "superior"
+        ? `Simulado de ${disciplina || curso || 'Graduação'} - ${new Date().toLocaleDateString()}`
+        : `Simulado de ${modoMateria === 'Única' ? materiaUnica : 'Múltiplas'} - ${new Date().toLocaleDateString()}`;
+
       const payload = {
-        nome_simulado: `Simulado de ${modoMateria === 'Única' ? materiaUnica : 'Múltiplas'} - ${new Date().toLocaleDateString()}`,
+        nome_simulado: nomeSimuladoCustom || defaultNome,
         respostas: payloadRespostas
       };
 
@@ -245,8 +253,9 @@ function DashboardContent() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
-      <header className="flex justify-between items-center mb-8 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        <header className="flex justify-between items-center mb-8 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
         <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400">Lumen Dashboard</h1>
         <div className="flex items-center gap-4">
           <Link href="/home" className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
@@ -533,21 +542,61 @@ function DashboardContent() {
         </div>
         )}
 
-        <div className={focusMode ? "md:col-span-4" : "md:col-span-3"}>
+        <div className={focusMode ? "md:col-span-4 flex justify-center" : "md:col-span-3 flex justify-center"}>
           {questoes.length > 0 ? (
-            <div className="space-y-6">
-              <div className="flex justify-end mb-4">
-                <button 
-                  onClick={() => handlePrint()}
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors"
-                >
-                  <Printer size={18} />
-                  Exportar PDF (Em Branco)
-                </button>
+            <div className="w-full max-w-4xl space-y-6">
+              {/* Cabeçalho do Caderno de Questões (Padrão PDF / Documento) */}
+              <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-wrap justify-between items-center gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs uppercase tracking-wider font-bold px-2.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                      Caderno de Questões
+                    </span>
+                    {nomeSimuladoCustom && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                        {nomeSimuladoCustom}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
+                    {nomeSimuladoCustom || (nivelSegmento === 'superior' ? (disciplina || curso || 'Graduação') : (modoMateria === 'Única' ? materiaUnica : materiasMultiplas.join(', ')))}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Total: {questoes.length} questões • Respondidas: {Object.keys(respostas).length}/{questoes.length}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      if (confirm("Deseja fechar este simulado e iniciar um novo?")) {
+                        setQuestoes([]);
+                        setRespostas({});
+                        setResultados(null);
+                        setSimuladoFinalizado(false);
+                        setNotaGeral(null);
+                        setNomeSimuladoCustom(null);
+                        localStorage.removeItem("@lumen:simuladoAtivo");
+                      }
+                    }}
+                    className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 font-medium px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+                    title="Descartar e criar novo simulado"
+                  >
+                    <RotateCcw size={14} /> Novo Simulado
+                  </button>
+
+                  <button 
+                    onClick={() => handlePrint()}
+                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3.5 py-2 rounded-lg transition-colors text-sm font-medium shadow-xs"
+                  >
+                    <Printer size={16} />
+                    Exportar PDF
+                  </button>
+                </div>
               </div>
 
               {simuladoFinalizado && notaGeral !== null && (
-                <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-xl flex justify-between items-center">
+                <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-2xl flex justify-between items-center shadow-sm">
                   <div>
                     <h2 className="text-xl font-bold text-blue-800 dark:text-blue-300">Simulado Finalizado!</h2>
                     <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">Veja seus erros e acertos abaixo.</p>
@@ -619,12 +668,13 @@ function DashboardContent() {
               </div>
             </div>
           ) : (
-            <div className="bg-white dark:bg-gray-800 p-12 text-center rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+            <div className="bg-white dark:bg-gray-800 p-12 text-center rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 w-full">
               Configure os filtros na lateral e clique em "Gerar Simulado" para começar seus estudos.
             </div>
           )}
         </div>
       </div>
+    </div>
 
       <div style={{ display: "none" }}>
         <SimuladoParaImprimir 

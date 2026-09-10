@@ -278,15 +278,18 @@ Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
   "feedback_detalhado": "Sua explicação pedagógica detalhada do que o aluno acertou e onde errou."
 }`;
                 try {
-                    const response = await ai.models.generateContent({
-                        model: 'gemini-3.6-flash',
+                    const response = await generateWithFallback({
                         contents: prompt,
                         config: {
                             responseMimeType: "application/json"
                         }
                     });
                     
-                    const correcaoIA = JSON.parse(response.text);
+                    let cleanText = response.text.trim();
+                    if (cleanText.startsWith("```")) {
+                        cleanText = cleanText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "");
+                    }
+                    const correcaoIA = JSON.parse(cleanText);
                     nota = Number(correcaoIA.nota);
                     feedback_ia = correcaoIA.feedback_detalhado;
                     acertou = nota >= 50; // Arbitrário, para a flag booleana
