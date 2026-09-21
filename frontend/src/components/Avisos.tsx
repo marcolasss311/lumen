@@ -17,11 +17,16 @@ const AvisosContext = createContext<Avisar>(() => {});
 
 const ESTILOS: Record<TipoAviso, string> = {
   erro: "bg-red-50 border-red-300 text-red-900 dark:bg-red-950 dark:border-red-800 dark:text-red-100",
-  sucesso: "bg-green-50 border-green-300 text-green-900 dark:bg-green-950 dark:border-green-800 dark:text-green-100",
+  sucesso:
+    "bg-green-50 border-green-300 text-green-900 dark:bg-green-950 dark:border-green-800 dark:text-green-100",
   info: "bg-white border-gray-200 text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100",
 };
 
-const ICONES: Record<TipoAviso, typeof Info> = { erro: AlertCircle, sucesso: CheckCircle2, info: Info };
+const ICONES: Record<TipoAviso, typeof Info> = {
+  erro: AlertCircle,
+  sucesso: CheckCircle2,
+  info: Info,
+};
 
 /**
  * Avisos na tela (substituem o alert() do navegador, que bloqueia a página e não
@@ -40,7 +45,7 @@ export function AvisosProvider({ children }: { children: React.ReactNode }) {
       setAvisos((atuais) => [...atuais.slice(-2), { id, tipo, mensagem }]);
       setTimeout(() => remover(id), tipo === "erro" ? 9000 : 6000);
     },
-    [remover],
+    [remover]
   );
 
   return (
@@ -48,7 +53,7 @@ export function AvisosProvider({ children }: { children: React.ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className="fixed z-[90] top-3 inset-x-3 sm:inset-x-auto sm:right-4 sm:w-96 flex flex-col gap-2 pointer-events-none"
+        className="print:hidden fixed z-[90] top-3 inset-x-3 sm:inset-x-auto sm:right-4 sm:w-96 flex flex-col gap-2 pointer-events-none"
       >
         {avisos.map((aviso) => {
           const Icone = ICONES[aviso.tipo];

@@ -88,7 +88,7 @@ export default function TextoComTabela({ texto, className = "" }: Props) {
       elements.push(
         <div
           key={`table-${keyPrefix}`}
-          className="overflow-x-auto my-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-800/90"
+          className="overflow-x-auto print:overflow-visible my-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm bg-white dark:bg-gray-800/90"
         >
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm text-left">
             <thead className="bg-gray-100 dark:bg-gray-900 font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700">

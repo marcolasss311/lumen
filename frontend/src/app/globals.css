@@ -1,7 +1,14 @@
 @import "tailwindcss";
 
-/* O tema escuro segue a classe .dark (controlada pelo next-themes), não só a preferência do sistema. */
-@custom-variant dark (&:where(.dark, .dark *));
+/* O tema escuro segue a classe .dark (controlada pelo next-themes), não só a preferência do sistema.
+   Vale só na tela: impressão/PDF sai sempre no tema claro (texto escuro em papel branco). */
+@custom-variant dark {
+  @media screen {
+    &:where(.dark, .dark *) {
+      @slot;
+    }
+  }
+}
 
 :root {
   --background: #f9fafb;
@@ -44,6 +51,36 @@ body {
 dialog::backdrop {
   background: rgb(0 0 0 / 0.55);
   backdrop-filter: blur(2px);
+}
+
+/* Impressão / "Salvar como PDF": papel branco e nenhum efeito pesado de tela. Desfoque de
+   fundo (backdrop-filter), sombras e elementos fixos deixam a pré-visualização do Chrome lenta. */
+@media print {
+  @page {
+    margin: 16mm;
+  }
+  :root,
+  .dark {
+    --background: #fff;
+    --foreground: #000;
+    color-scheme: light;
+  }
+  body {
+    background: #fff !important;
+  }
+  *,
+  *::before,
+  *::after {
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+  .sticky,
+  .fixed {
+    position: static !important;
+  }
 }
 
 /* Respeita quem pediu ao sistema para reduzir animações. */

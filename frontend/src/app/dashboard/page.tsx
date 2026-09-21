@@ -40,7 +40,7 @@ import {
   CheckCircle2,
   Clock,
 } from "lucide-react";
-import { useReactToPrint } from "react-to-print";
+import { imprimir } from "@/lib/imprimir";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
 import NavegacaoQuestionario from "@/components/NavegacaoQuestionario";
 import LoadingScreen from "@/components/LoadingScreen";
@@ -205,8 +205,6 @@ function DashboardContent() {
   const [arrastando, setArrastando] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({ contentRef: printRef });
 
   const tempos = useTemposMedios(Boolean(user));
 
@@ -541,10 +539,10 @@ function DashboardContent() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 print:min-h-0 print:bg-white">
       <CabecalhoApp usuario={user} extra={botaoFoco} />
 
-      <main id="conteudo" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8">
+      <main id="conteudo" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8 print:hidden">
         <TituloPagina
           icone={temSimulado ? ClipboardList : Sparkles}
           rotulo={
@@ -581,7 +579,7 @@ function DashboardContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePrint()}
+                  onClick={() => imprimir(tituloCaderno)}
                   className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-3.5 py-2 rounded-lg transition-colors text-sm font-medium shadow-sm"
                 >
                   <Printer size={16} aria-hidden="true" /> Exportar PDF
@@ -1365,14 +1363,13 @@ function DashboardContent() {
         onCancelar={() => setConfirmandoNovo(false)}
       />
 
-      <div style={{ display: "none" }}>
+      {questoes.length > 0 && (
         <SimuladoParaImprimir
-          ref={printRef}
           questoes={questoes}
           alunoNome={user?.displayName || ""}
           materia={tituloCaderno}
         />
-      </div>
+      )}
     </div>
   );
 }

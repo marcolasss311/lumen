@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -31,7 +31,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Link from "next/link";
-import { useReactToPrint } from "react-to-print";
+import { imprimir } from "@/lib/imprimir";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
 import TextoComTabela from "@/components/TextoComTabela";
 import LoadingScreen from "@/components/LoadingScreen";
@@ -73,11 +73,6 @@ export default function Desempenho() {
   const [refazendoId, setRefazendoId] = useState<string | null>(null);
   const router = useRouter();
   const avisar = useAvisos();
-
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-  });
 
   const carregarDetalhesSimulado = async (id: string) => {
     setCarregandoDetalhes(true);
@@ -172,9 +167,9 @@ export default function Desempenho() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 print:min-h-0 print:bg-white">
       <CabecalhoApp usuario={user} />
-      <main id="conteudo" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8">
+      <main id="conteudo" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8 print:hidden">
         <TituloPagina
           icone={BarChart2}
           rotulo="Meu desempenho"
@@ -399,7 +394,7 @@ export default function Desempenho() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handlePrint()}
+                      onClick={() => imprimir(simuladoAtivo.nome)}
                       className="flex items-center gap-1.5 bg-green-700 hover:bg-green-800 text-white px-3 py-2 rounded-md transition-colors text-sm font-medium"
                     >
                       <Printer size={15} aria-hidden="true" /> PDF
@@ -477,16 +472,13 @@ export default function Desempenho() {
         </div>
       </main>
 
-      <div style={{ display: "none" }}>
-        {simuladoAtivo && (
-          <SimuladoParaImprimir
-            ref={printRef}
-            questoes={simuladoAtivo.questoes}
-            alunoNome={user?.displayName || user?.email || "Aluno"}
-            materia={simuladoAtivo.nome}
-          />
-        )}
-      </div>
+      {simuladoAtivo && (
+        <SimuladoParaImprimir
+          questoes={simuladoAtivo.questoes}
+          alunoNome={user?.displayName || user?.email || "Aluno"}
+          materia={simuladoAtivo.nome}
+        />
+      )}
     </div>
   );
 }
