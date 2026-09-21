@@ -98,12 +98,14 @@ A plataforma estará disponível em `http://localhost:3000`! 🎉
 
 ## 🚢 Deploy
 
-- **Backend (Google Cloud Run, região `us-east1`) + banco no [Neon](https://neon.com):** a imagem é gerada pelo `backend/Dockerfile`. `DATABASE_URL` e `GEMINI_API_KEY` ficam no Secret Manager; a configuração é mantida entre deploys. Para publicar uma nova versão:
+- **Backend (Google Cloud Run, projeto `lumenm-api`, região `us-east1`) + banco no [Neon](https://neon.com):** a imagem é gerada pelo `backend/Dockerfile`. `DATABASE_URL` e `GEMINI_API_KEY` ficam no Secret Manager (`lumen-database-url`, `lumen-gemini-api-key`) e o serviço roda com a conta `lumen-backend@lumenm-api.iam.gserviceaccount.com`, que só acessa esses segredos. A configuração é mantida entre deploys. Para publicar uma nova versão (no PowerShell, use `gcloud.cmd` ao chamar o gcloud diretamente):
   ```bash
   cd backend
   npm run deploy
   ```
-  Use a conexão **direta** do Neon (sem `-pooler` no host) com `?sslmode=verify-full`: as migrações usam advisory locks, que não funcionam através do PgBouncer.
+  - URL da API: `https://lumen-backend-36404012863.us-east1.run.app` (o frontend usa `NEXT_PUBLIC_API_URL=<url>/api`).
+  - A cobrança fica **só** no projeto `lumenm-api`. O projeto `lumenm` (Firebase e chave do Gemini) fica **sem** cobrança, para o Gemini continuar no nível gratuito.
+  - Use a conexão **direta** do Neon (sem `-pooler` no host) com `?sslmode=verify-full`: as migrações usam advisory locks, que não funcionam através do PgBouncer.
 - **Frontend (Firebase Hosting):** o Next.js gera um site estático (`output: "export"`), servido direto pela CDN. Para publicar:
   ```bash
   cd frontend
