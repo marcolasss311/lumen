@@ -1,14 +1,15 @@
 "use client";
 
 import TextoComTabela from "@/components/TextoComTabela";
+import type { Alternativa, Questao, ResultadoQuestao } from "@/lib/tipos";
 
 interface Props {
-  questao: any;
+  questao: Questao;
   index: number;
   modo: "prova" | "feedback";
   respostaSelecionada: string | null;
   onResponder: (resp: string) => void;
-  feedback?: any;
+  feedback?: ResultadoQuestao;
 }
 
 export default function RenderizadorSimulado({
@@ -17,9 +18,8 @@ export default function RenderizadorSimulado({
   modo,
   respostaSelecionada,
   onResponder,
-  feedback,
 }: Props) {
-  const alternativas =
+  const alternativas: Alternativa[] | null =
     typeof questao.alternativas === "string"
       ? JSON.parse(questao.alternativas)
       : questao.alternativas;
@@ -48,7 +48,7 @@ export default function RenderizadorSimulado({
       </div>
 
       <div className="space-y-3">
-        {alternativas?.map((alt: any, i: number) => {
+        {alternativas?.map((alt, i) => {
           const isSelected = respostaSelecionada === alt.letra;
           let bgColor =
             "bg-gray-50 dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-gray-600 border-gray-200 dark:border-gray-600";

@@ -2,93 +2,84 @@ const express = require("express");
 const router = express.Router();
 const db = require("../../db");
 const authMiddleware = require("../middlewares/authMiddleware");
+const { lerAlternativas } = require("../../services/questoes");
+const v = require("../../services/validacao");
 
+// GET /api/desempenho
 router.get("/", authMiddleware, async (req, res) => {
-  try {
-    const firebase_uid = req.user.uid;
+  const uid = req.user.uid;
 
-    const statsQuery = `
-            SELECT 
-                q.materia,
-                COUNT(h.id) as total_tentativas,
-                SUM(CASE WHEN h.acertou = true THEN 1 ELSE 0 END) as total_acertos,
-                AVG(COALESCE(h.nota, CASE WHEN h.acertou = true THEN 100 ELSE 0 END)) as media_nota
-            FROM historico_respostas h
-            JOIN questoes q ON h.questao_id = q.id
-            WHERE h.firebase_uid = $1
-            GROUP BY q.materia
-            ORDER BY media_nota DESC
-        `;
-    const statsResult = await db.query(statsQuery, [firebase_uid]);
+  const [estatisticas, historico] = await Promise.all([
+    db.query(
+      `SELECT
+         q.materia,
+         COUNT(h.id) AS total_tentativas,
+         SUM(CASE WHEN h.acertou THEN 1 ELSE 0 END) AS total_acertos,
+         AVG(COALESCE(h.nota, CASE WHEN h.acertou THEN 100 ELSE 0 END)) AS media_nota
+       FROM historico_respostas h
+       JOIN questoes q ON h.questao_id = q.id
+       WHERE h.firebase_uid = $1
+       GROUP BY q.materia
+       ORDER BY media_nota DESC`,
+      [uid],
+    ),
+    db.query(
+      `SELECT id, nome, nota_geral, data_realizacao
+       FROM simulados_realizados
+       WHERE firebase_uid = $1 AND status = 'finalizado'
+       ORDER BY data_realizacao DESC
+       LIMIT 50`,
+      [uid],
+    ),
+  ]);
 
-    const historyQuery = `
-            SELECT 
-                id,
-                nome,
-                nota_geral,
-                data_realizacao
-            FROM simulados_realizados
-            WHERE firebase_uid = $1
-            ORDER BY data_realizacao DESC
-            LIMIT 50
-        `;
-    const historyResult = await db.query(historyQuery, [firebase_uid]);
-
-    return res.json({
-      estatisticas: statsResult.rows,
-      historico: historyResult.rows, // agora é uma lista de simulados
-    });
-  } catch (error) {
-    console.error("Erro ao buscar desempenho:", error);
-    return res.status(500).json({ error: "Erro interno" });
-  }
+  res.json({
+    estatisticas: estatisticas.rows,
+    historico: historico.rows,
+  });
 });
 
 // GET /api/desempenho/simulado/:id
 router.get("/simulado/:id", authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const firebase_uid = req.user.uid;
+  const uid = req.user.uid;
+  const simuladoId = v.exigirUuid(req.params.id);
 
-    // Verifica se o simulado pertence ao usuário
-    const simRes = await db.query(
-      `SELECT * FROM simulados_realizados WHERE id = $1 AND firebase_uid = $2`,
-      [id, firebase_uid],
-    );
-    if (simRes.rows.length === 0)
-      return res.status(404).json({ error: "Simulado não encontrado" });
+  const simulado = await db.query(
+    `SELECT id, nome, nota_geral, data_realizacao
+     FROM simulados_realizados
+     WHERE id = $1 AND firebase_uid = $2 AND status = 'finalizado'`,
+    [simuladoId, uid],
+  );
+  if (simulado.rows.length === 0) throw new v.ErroRequisicao(404, "Simulado não encontrado.");
 
-    const historyQuery = `
-            SELECT 
-                h.id as historico_id,
-                q.id,
-                q.origem,
-                q.materia,
-                q.topico,
-                q.pergunta,
-                q.alternativas,
-                q.gabarito,
-                q.tipo_questao,
-                h.acertou,
-                h.nota,
-                h.resposta_aluno,
-                h.feedback_ia,
-                h.data_resposta
-            FROM historico_respostas h
-            JOIN questoes q ON h.questao_id = q.id
-            WHERE h.simulado_id = $1
-            ORDER BY h.data_resposta ASC
-        `;
-    const historyResult = await db.query(historyQuery, [id]);
+  const questoes = await db.query(
+    `SELECT
+       h.id AS historico_id,
+       q.id,
+       q.origem,
+       q.materia,
+       q.topico,
+       q.pergunta,
+       q.alternativas,
+       q.gabarito,
+       q.tipo_questao,
+       h.acertou,
+       h.nota,
+       h.resposta_aluno,
+       h.feedback_ia,
+       h.data_resposta
+     FROM historico_respostas h
+     JOIN questoes q ON h.questao_id = q.id
+     JOIN simulados_realizados s ON s.id = h.simulado_id
+     WHERE h.simulado_id = $1 AND h.firebase_uid = $2
+     ORDER BY array_position(s.questao_ids, h.questao_id) NULLS LAST, h.data_resposta ASC, h.id ASC`,
+    [simuladoId, uid],
+  );
 
-    return res.json({
-      simulado: simRes.rows[0],
-      questoes: historyResult.rows,
-    });
-  } catch (error) {
-    console.error("Erro ao buscar detalhes do simulado:", error);
-    return res.status(500).json({ error: "Erro interno" });
-  }
+  res.json({
+    simulado: simulado.rows[0],
+    questoes: questoes.rows.map((q) => ({ ...q, alternativas: lerAlternativas(q.alternativas) })),
+  });
 });
 
 module.exports = router;

@@ -1,40 +1,48 @@
-const admin = require("../../core/firebase");
-const { getAuth } = require("firebase-admin/auth");
+const { auth } = require("../../core/firebase");
 const db = require("../../db");
 
+// UIDs que já existem na tabela `usuarios`: evita um INSERT a cada requisição.
+const usuariosSincronizados = new Set();
+const MAX_CACHE_USUARIOS = 10_000;
+
+async function garantirUsuario(token) {
+  if (usuariosSincronizados.has(token.uid)) return;
+
+  await db.query(
+    `INSERT INTO usuarios (firebase_uid, email, nome, ano_escolar_atual)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (firebase_uid) DO NOTHING`,
+    [
+      token.uid,
+      token.email ? String(token.email).slice(0, 255) : null,
+      String(token.name || "Usuário Lumen").slice(0, 255),
+      "Não Informado",
+    ],
+  );
+
+  if (usuariosSincronizados.size >= MAX_CACHE_USUARIOS) usuariosSincronizados.clear();
+  usuariosSincronizados.add(token.uid);
+}
+
 const authMiddleware = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  const [esquema, token] = (req.headers.authorization || "").split(" ");
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res
-      .status(401)
-      .json({ error: "Token de autenticação não fornecido ou inválido." });
+  if (esquema !== "Bearer" || !token) {
+    return res.status(401).json({ error: "Token de autenticação não fornecido." });
   }
 
-  const token = authHeader.split("Bearer ")[1];
-
+  let decodificado;
   try {
-    const decodedToken = await getAuth().verifyIdToken(token);
-    req.user = decodedToken;
-
-    // Garante que o usuário existe no banco relacional antes de qualquer requisição avançar
-    await db.query(
-      `INSERT INTO usuarios (firebase_uid, email, nome, ano_escolar_atual) 
-             VALUES ($1, $2, $3, $4) 
-             ON CONFLICT (firebase_uid) DO NOTHING`,
-      [
-        decodedToken.uid,
-        decodedToken.email || null,
-        decodedToken.name || "Usuário Lumen",
-        "Não Informado",
-      ],
-    );
-
-    next();
+    decodificado = await auth.verifyIdToken(token);
   } catch (error) {
-    console.error("Erro na verificação do token:", error);
-    return res.status(403).json({ error: "Token inválido ou expirado." });
+    console.warn("Token rejeitado:", error.code || error.message);
+    return res.status(401).json({ error: "Sessão inválida ou expirada. Faça login novamente." });
   }
+
+  req.user = decodificado;
+  // Falha de banco aqui vira 500 no tratador de erros (e não um 403 enganoso).
+  await garantirUsuario(decodificado);
+  next();
 };
 
 module.exports = authMiddleware;

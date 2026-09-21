@@ -6,7 +6,15 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import RenderizadorSimulado from "@/components/RenderizadorSimulado";
 import RenderizadorDiscursiva from "@/components/RenderizadorDiscursiva";
-import axios from "axios";
+import { api, ApiError, mensagemDeErro } from "@/lib/api";
+import {
+  CHAVE_SIMULADO_SALVO,
+  type Questao,
+  type ResultadoQuestao,
+  type SimuladoCorrigido,
+  type SimuladoGerado,
+  type SimuladoSalvo,
+} from "@/lib/tipos";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   Eye,
@@ -33,6 +41,14 @@ import NavegacaoQuestionario from "@/components/NavegacaoQuestionario";
 import LoadingScreen from "@/components/LoadingScreen";
 import Link from "next/link";
 
+const MB = 1024 * 1024;
+const MAX_ARQUIVOS = 5;
+const MAX_BYTES_ARQUIVO = 15 * MB;
+const MAX_BYTES_TOTAL = 20 * MB;
+const EXTENSOES_ACEITAS = [".pdf", ".txt", ".md"];
+// Geração com material grande e correção de várias discursivas podem levar alguns minutos.
+const TIMEOUT_IA_MS = 4 * 60 * 1000;
+
 function DashboardContent() {
   const [user, setUser] = useState<User | null>(() => auth.currentUser);
   const [loading, setLoading] = useState(() => !auth.currentUser);
@@ -58,10 +74,12 @@ function DashboardContent() {
   const [dificuldade, setDificuldade] = useState("Intermediário (Padrão)");
 
   // Estados do Simulado
-  const [questoes, setQuestoes] = useState<any[]>([]);
+  const [simuladoId, setSimuladoId] = useState<string | null>(null);
+  const [questoes, setQuestoes] = useState<Questao[]>([]);
   const [gerando, setGerando] = useState(false);
+  const [refazendo, setRefazendo] = useState(false);
   const [respostas, setRespostas] = useState<{ [id: string]: string }>({});
-  const [resultados, setResultados] = useState<any[] | null>(null);
+  const [resultados, setResultados] = useState<ResultadoQuestao[] | null>(null);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [simuladoFinalizado, setSimuladoFinalizado] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
@@ -76,10 +94,9 @@ function DashboardContent() {
   // Estados do Modo de Criação com Material Próprio (PDF / Slides)
   const [modoCriacao, setModoCriacao] = useState<"curriculo" | "material">("curriculo");
   const [arquivosMaterial, setArquivosMaterial] = useState<{
+    arquivo: File;
     nome: string;
     tamanho: number;
-    base64: string;
-    mimeType: string;
   }[]>([]);
   const [textoMaterial, setTextoMaterial] = useState("");
   const [exibirAnotacoes, setExibirAnotacoes] = useState(false);
@@ -89,7 +106,7 @@ function DashboardContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (gerando) {
       setEtapaGeracao(0);
       interval = setInterval(() => {
@@ -101,7 +118,8 @@ function DashboardContent() {
     return () => clearInterval(interval);
   }, [gerando]);
 
-  const handleSelecionarArquivos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Os arquivos são enviados como estão (multipart), sem conversão para base64 no navegador.
+  const handleSelecionarArquivos = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -111,36 +129,29 @@ function DashboardContent() {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
-      if (novosArquivos.length >= 5) {
-        alert("Você pode adicionar no máximo 5 arquivos por simulado.");
+      if (novosArquivos.length >= MAX_ARQUIVOS) {
+        alert(`Você pode adicionar no máximo ${MAX_ARQUIVOS} arquivos por simulado.`);
         break;
       }
 
-      if (file.size > 15 * 1024 * 1024) {
-        alert(`O arquivo "${file.name}" ultrapassa o limite individual de 15MB.`);
+      const extensao = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+      if (!EXTENSOES_ACEITAS.includes(extensao)) {
+        alert(`O arquivo "${file.name}" não é suportado. Envie PDF, TXT ou MD.`);
         continue;
       }
 
-      if (tamanhoTotal + file.size > 22 * 1024 * 1024) {
-        alert("O tamanho total dos arquivos combinados ultrapassa 20MB.");
+      if (file.size > MAX_BYTES_ARQUIVO) {
+        alert(`O arquivo "${file.name}" ultrapassa o limite individual de ${MAX_BYTES_ARQUIVO / MB}MB.`);
+        continue;
+      }
+
+      if (tamanhoTotal + file.size > MAX_BYTES_TOTAL) {
+        alert(`O tamanho total dos arquivos combinados ultrapassa ${MAX_BYTES_TOTAL / MB}MB.`);
         break;
       }
 
       tamanhoTotal += file.size;
-
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      novosArquivos.push({
-        nome: file.name,
-        tamanho: file.size,
-        base64,
-        mimeType: file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "text/plain"),
-      });
+      novosArquivos.push({ arquivo: file, nome: file.name, tamanho: file.size });
     }
 
     setArquivosMaterial(novosArquivos);
@@ -190,11 +201,20 @@ function DashboardContent() {
 
   // Carregar simulado salvo no localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("@lumen:simuladoAtivo");
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(CHAVE_SIMULADO_SALVO);
+    } catch {
+      // Armazenamento bloqueado (modo privado): segue sem restaurar.
+    }
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        if (parsed.questoes && parsed.questoes.length > 0) {
+        const parsed: Partial<SimuladoSalvo> = JSON.parse(saved);
+        // Simulados em andamento de versões antigas (sem id no servidor) não podem ser finalizados.
+        if (!parsed.simuladoId && !parsed.simuladoFinalizado) {
+          localStorage.removeItem(CHAVE_SIMULADO_SALVO);
+        } else if (parsed.questoes && parsed.questoes.length > 0) {
+          setSimuladoId(parsed.simuladoId || null);
           setQuestoes(parsed.questoes);
           setRespostas(parsed.respostas || {});
           setResultados(parsed.resultados || null);
@@ -212,10 +232,10 @@ function DashboardContent() {
 
   // Salvar estado atual do simulado sempre que mudar
   useEffect(() => {
-    if (questoes.length > 0) {
-      localStorage.setItem(
-        "@lumen:simuladoAtivo",
-        JSON.stringify({
+    try {
+      if (questoes.length > 0) {
+        const estado: SimuladoSalvo = {
+          simuladoId,
           questoes,
           respostas,
           resultados,
@@ -223,12 +243,16 @@ function DashboardContent() {
           simuladoFinalizado,
           notaGeral,
           nomeSimuladoCustom,
-        }),
-      );
-    } else {
-      localStorage.removeItem("@lumen:simuladoAtivo");
+        };
+        localStorage.setItem(CHAVE_SIMULADO_SALVO, JSON.stringify(estado));
+      } else {
+        localStorage.removeItem(CHAVE_SIMULADO_SALVO);
+      }
+    } catch {
+      // Sem espaço ou armazenamento bloqueado: o simulado continua funcionando, só não persiste.
     }
   }, [
+    simuladoId,
     questoes,
     respostas,
     resultados,
@@ -268,6 +292,7 @@ function DashboardContent() {
     }
 
     setGerando(true);
+    setSimuladoId(null);
     setRespostas({});
     setResultados(null);
     setPaginaAtual(1);
@@ -276,31 +301,26 @@ function DashboardContent() {
     setNomeSimuladoCustom(null);
 
     try {
-      const token = await user.getIdToken();
-      let payload: any;
+      let body: FormData | Record<string, unknown>;
 
       if (modoCriacao === "material") {
-        const nomesArquivos = arquivosMaterial.map((a) => a.nome).join(", ");
-        payload = {
-          materiais_arquivos: arquivosMaterial.map((a) => ({
-            nome: a.nome,
-            mimeType: a.mimeType,
-            base64: a.base64,
-          })),
-          material_texto: textoMaterial.trim() || null,
-          materia:
-            nomeMateriaMaterial.trim() ||
-            (arquivosMaterial[0]?.nome
-              ? `Material: ${arquivosMaterial[0].nome.replace(/\.[^/.]+$/, "")}`
-              : "Material Próprio"),
-          topico: nomesArquivos || "Anotações do Aluno",
-          quantidade: quantidade,
-          tipo_questao: tipoQuestao,
-          dificuldade: dificuldade,
-          nivel: nivelSegmento,
-        };
+        const form = new FormData();
+        form.append(
+          "dados",
+          JSON.stringify({
+            modo: "material",
+            material_texto: textoMaterial.trim() || null,
+            materia: nomeMateriaMaterial.trim() || null,
+            quantidade: quantidade,
+            tipo_questao: tipoQuestao,
+            dificuldade: dificuldade,
+            nivel: nivelSegmento,
+          }),
+        );
+        for (const a of arquivosMaterial) form.append("arquivos", a.arquivo, a.nome);
+        body = form;
       } else {
-        payload = {
+        body = {
           ano_escolar:
             nivelSegmento === "superior" ? "Ensino Superior" : anoEscolar,
           nivel: nivelSegmento,
@@ -321,93 +341,82 @@ function DashboardContent() {
         };
       }
 
-      const res = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/simulado/gerar`,
-        payload,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      setQuestoes(res.data.questoes);
-      if (modoCriacao === "material" && payload.materia) {
-        setNomeSimuladoCustom(payload.materia);
+      const res = await api<SimuladoGerado>("/simulado/gerar", {
+        method: "POST",
+        body,
+        timeoutMs: TIMEOUT_IA_MS,
+      });
+      setSimuladoId(res.simulado_id);
+      setQuestoes(res.questoes);
+      if (modoCriacao === "material") {
+        setNomeSimuladoCustom(res.nome);
       }
       setFocusMode(true);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Erro ao gerar simulado", error);
-      const serverError = error.response?.data?.error;
-      if (error.response && error.response.status === 503) {
-        alert(
-          "Os servidores da inteligência artificial estão com alta demanda no momento. Aguarde alguns segundos e tente novamente!",
-        );
-      } else if (serverError) {
-        alert(`Não foi possível gerar o simulado: ${serverError}`);
-      } else {
-        alert("Erro ao gerar simulado. Verifique sua conexão e tente novamente.");
-      }
+      alert(
+        error instanceof ApiError && error.status >= 500 && error.status !== 503
+          ? `Não foi possível gerar o simulado: ${error.message}`
+          : mensagemDeErro(error, "Erro ao gerar simulado. Verifique sua conexão e tente novamente."),
+      );
     } finally {
       setGerando(false);
     }
   };
 
+  // A correção acontece no servidor, com o gabarito do banco. O navegador só envia as respostas.
   const finalizarSimulado = async () => {
     if (!user) return;
+    if (!simuladoId) {
+      return alert("Este simulado foi criado em uma versão anterior e não pode ser corrigido. Gere um novo simulado.");
+    }
     if (Object.keys(respostas).length < questoes.length) {
       return alert("Responda todas as questões antes de finalizar!");
     }
     setFinalizando(true);
     try {
-      const token = await user.getIdToken();
-
-      const payloadRespostas = questoes.map((q) => {
-        const resp = respostas[q.id];
-        if (q.tipo_questao === "Fechada") {
-          const alts =
-            typeof q.alternativas === "string"
-              ? JSON.parse(q.alternativas)
-              : q.alternativas;
-          const escolhida = alts.find((a: any) => a.letra === resp);
-          return {
-            questao_id: q.id,
-            tipo: "Fechada",
-            alternativa_selecionada: resp,
-            acertou: escolhida?.correta || false,
-            explicacao: escolhida?.explicacao || null,
-          };
-        } else {
-          return {
-            questao_id: q.id,
-            tipo: "Aberta",
-            resposta_aluno: resp,
-            pergunta: q.pergunta,
-            gabarito: q.gabarito,
-          };
-        }
+      const res = await api<SimuladoCorrigido>("/simulado/finalizar", {
+        method: "POST",
+        body: {
+          simulado_id: simuladoId,
+          respostas,
+          nome_simulado: nomeSimuladoCustom || undefined,
+        },
+        timeoutMs: TIMEOUT_IA_MS,
       });
 
-      const defaultNome =
-        nivelSegmento === "superior"
-          ? `Simulado de ${disciplina || curso || "Graduação"} - ${new Date().toLocaleDateString()}`
-          : `Simulado de ${modoMateria === "Única" ? materiaUnica : "Múltiplas"} - ${new Date().toLocaleDateString()}`;
-
-      const payload = {
-        nome_simulado: nomeSimuladoCustom || defaultNome,
-        respostas: payloadRespostas,
-      };
-
-      const res = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/simulado/finalizar`,
-        payload,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-
-      setResultados(res.data.resultados);
-      setNotaGeral(res.data.nota_geral);
+      // As questões voltam com o gabarito liberado para exibir o feedback.
+      setQuestoes(res.questoes);
+      setResultados(res.resultados);
+      setNotaGeral(res.nota_geral);
       setSimuladoFinalizado(true);
       setPaginaAtual(1); // Volta pra 1 pra ver os feedbacks
     } catch (error) {
       console.error("Erro ao finalizar simulado", error);
-      alert("Erro ao conectar com a IA de correção.");
+      alert(mensagemDeErro(error, "Erro ao conectar com a IA de correção."));
     } finally {
       setFinalizando(false);
+    }
+  };
+
+  const refazerSimulado = async () => {
+    if (!simuladoId) return;
+    setRefazendo(true);
+    try {
+      const res = await api<SimuladoGerado>(`/simulado/${simuladoId}/refazer`, { method: "POST" });
+      setSimuladoId(res.simulado_id);
+      setQuestoes(res.questoes);
+      setNomeSimuladoCustom(res.nome);
+      setRespostas({});
+      setResultados(null);
+      setSimuladoFinalizado(false);
+      setNotaGeral(null);
+      setPaginaAtual(1);
+    } catch (error) {
+      console.error("Erro ao refazer simulado", error);
+      alert(mensagemDeErro(error, "Não foi possível refazer o simulado."));
+    } finally {
+      setRefazendo(false);
     }
   };
 
@@ -1070,13 +1079,13 @@ function DashboardContent() {
                               "Deseja fechar este simulado e iniciar um novo?",
                             )
                           ) {
+                            setSimuladoId(null);
                             setQuestoes([]);
                             setRespostas({});
                             setResultados(null);
                             setSimuladoFinalizado(false);
                             setNotaGeral(null);
                             setNomeSimuladoCustom(null);
-                            localStorage.removeItem("@lumen:simuladoAtivo");
                           }
                         }}
                         className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 font-medium px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
@@ -1106,27 +1115,12 @@ function DashboardContent() {
                         </p>
                         <div className="mt-4 flex flex-wrap items-center gap-3">
                           <button
-                            onClick={() => {
-                              let novoNome =
-                                nomeSimuladoCustom ||
-                                (nivelSegmento === "superior"
-                                  ? disciplina || curso || "Graduação"
-                                  : modoMateria === "Única"
-                                    ? materiaUnica
-                                    : materiasMultiplas.join(", "));
-                              if (!novoNome.includes("(Nova Tentativa)")) {
-                                novoNome = `${novoNome} (Nova Tentativa)`;
-                              }
-                              setNomeSimuladoCustom(novoNome);
-                              setRespostas({});
-                              setResultados(null);
-                              setSimuladoFinalizado(false);
-                              setNotaGeral(null);
-                              setPaginaAtual(1);
-                            }}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all"
+                            onClick={refazerSimulado}
+                            disabled={refazendo || !simuladoId}
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all disabled:opacity-50"
                           >
-                            <RotateCcw size={16} /> Refazer Este Simulado
+                            <RotateCcw size={16} />{" "}
+                            {refazendo ? "Preparando..." : "Refazer Este Simulado"}
                           </button>
                           <Link
                             href="/desempenho"

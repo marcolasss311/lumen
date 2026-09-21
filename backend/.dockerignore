@@ -1,0 +1,10 @@
+# Nada de segredos ou dependências locais dentro da imagem.
+node_modules
+.env
+.env.*
+*serviceAccountKey*
+*.dump
+Dockerfile
+.dockerignore
+.gcloudignore
+docker-compose.yml

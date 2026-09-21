@@ -2,11 +2,12 @@
 
 import React, { useState } from "react";
 import { Check, X as XIcon, ChevronUp, ListOrdered } from "lucide-react";
+import type { Questao, ResultadoQuestao } from "@/lib/tipos";
 
 interface Props {
-  questoes: any[];
+  questoes: Questao[];
   respostas: { [id: string]: string };
-  resultados: any[] | null;
+  resultados: ResultadoQuestao[] | null;
   simuladoFinalizado: boolean;
   paginaAtual: number;
   itensPorPagina: number;

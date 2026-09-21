@@ -57,17 +57,16 @@ Se você deseja contribuir ou rodar a Lumen na sua própria máquina, siga os pa
    ```bash
    npm install
    ```
-3. Crie um arquivo `.env` com suas credenciais de ambiente (Gemini e Banco de Dados):
-   ```env
-   PORT=3001
-   DATABASE_URL=postgres://seu_usuario:sua_senha@localhost:5432/seu_banco
-   GEMINI_API_KEY=sua_chave_secreta_aqui
+3. Copie `backend/.env.example` para `backend/.env` e preencha (Gemini e Banco de Dados).
+4. Suba um Postgres local (usa as credenciais do `.env`, acessível só em `localhost`):
+   ```bash
+   docker compose up -d
    ```
-4. Inicie o servidor:
+5. Inicie o servidor:
    ```bash
    npm run dev
    ```
-   > *Nota: Na primeira inicialização, o servidor criará automaticamente as tabelas necessárias no banco de dados através das migrações internas.*
+   > *Nota: a cada inicialização o servidor aplica as migrações pendentes (`src/db/migrate.js`) antes de aceitar requisições. Para rodar manualmente: `npm run migrate`. Nunca edite uma migração já aplicada; crie uma nova no fim da lista.*
 
 ### 3. Configurando o Frontend
 1. Entre na pasta do frontend:
@@ -94,4 +93,27 @@ Se você deseja contribuir ou rodar a Lumen na sua própria máquina, siga os pa
    ```
 
 A plataforma estará disponível em `http://localhost:3000`! 🎉
+
+---
+
+## 🚢 Deploy
+
+- **Backend (Google Cloud Run, região `us-east1`) + banco no [Neon](https://neon.com):** a imagem é gerada pelo `backend/Dockerfile`. `DATABASE_URL` e `GEMINI_API_KEY` ficam no Secret Manager; a configuração é mantida entre deploys. Para publicar uma nova versão:
+  ```bash
+  cd backend
+  npm run deploy
+  ```
+  Use a conexão **direta** do Neon (sem `-pooler` no host) com `?sslmode=verify-full`: as migrações usam advisory locks, que não funcionam através do PgBouncer.
+- **Frontend (Firebase Hosting):** o Next.js gera um site estático (`output: "export"`), servido direto pela CDN. Para publicar:
+  ```bash
+  cd frontend
+  npm run deploy
+  ```
+
+## 🔒 Segurança
+
+- A correção é feita **no servidor**: durante a prova o navegador recebe as questões sem gabarito, e a nota é calculada com os dados do banco.
+- Questões geradas a partir do material do aluno (PDFs/anotações) são **privadas** e nunca entram no banco público.
+- As rotas de IA têm limite de uso por conta e por IP (configurável por variáveis `LIMITE_*`).
+- Nunca faça commit de `.env` nem de arquivos de service account. O backend não precisa de service account: só o `FIREBASE_PROJECT_ID`.
 

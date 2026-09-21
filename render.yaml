@@ -1,12 +1,16 @@
 services:
   - type: web
     name: lumen-backend
-    env: node
+    runtime: node
     rootDir: backend
     plan: free
-    buildCommand: npm install && node src/db/initDb.js
-    startCommand: node src/index.js
+    # As migrações rodam no boot do servidor (src/index.js), antes de aceitar requisições.
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: DATABASE_URL
         fromDatabase:
           name: lumen-db
@@ -15,6 +19,9 @@ services:
         sync: false
       - key: FIREBASE_PROJECT_ID
         sync: false
+      # Domínios do frontend autorizados a chamar a API (separados por vírgula).
+      - key: CORS_ORIGINS
+        value: https://lumenm.web.app,https://lumenm.firebaseapp.com
 
 databases:
   - name: lumen-db

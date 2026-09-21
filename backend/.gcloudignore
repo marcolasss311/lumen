@@ -1,0 +1,11 @@
+# Arquivos que o `gcloud run deploy --source .` NÃO envia para o Google.
+# Sem este arquivo, o .env (com segredos) seria enviado junto com o código.
+.gcloudignore
+.git
+.gitignore
+node_modules/
+.env
+.env.*
+*serviceAccountKey*
+*.dump
+docker-compose.yml

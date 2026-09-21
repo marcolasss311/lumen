@@ -1,81 +1,34 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../../db");
+const config = require("../../config");
 const authMiddleware = require("../middlewares/authMiddleware");
-const { generateWithFallback } = require("../../core/gemini");
+const { limitesCorrecao } = require("../middlewares/limites");
+const { corrigirDiscursiva } = require("../../services/correcao");
+const v = require("../../services/validacao");
 
-// POST /api/correcao/discursiva
-router.post("/discursiva", authMiddleware, async (req, res) => {
-  try {
-    const { questao_id, resposta_aluno } = req.body;
-    const firebase_uid = req.user.uid;
+// POST /api/correcao/discursiva — corrige uma questão avulsa
+router.post("/discursiva", authMiddleware, limitesCorrecao, async (req, res) => {
+  const uid = req.user.uid;
+  const questaoId = v.exigirUuid(req.body?.questao_id, "questao_id");
+  const resposta = v.texto(req.body?.resposta_aluno, config.limites.caracteresRespostaAberta);
 
-    // 1. Buscar a questão no banco
-    const questaoResult = await db.query(
-      "SELECT pergunta, gabarito FROM questoes WHERE id = $1",
-      [questao_id],
-    );
+  const { rows } = await db.query(
+    `SELECT pergunta, gabarito FROM questoes
+     WHERE id = $1 AND tipo_questao = 'Aberta' AND (privada = false OR criado_por = $2)`,
+    [questaoId, uid],
+  );
+  if (rows.length === 0) throw new v.ErroRequisicao(404, "Questão não encontrada.");
 
-    if (questaoResult.rows.length === 0) {
-      return res.status(404).json({ error: "Questão não encontrada." });
-    }
+  const { nota, feedback } = await corrigirDiscursiva({ ...rows[0], resposta });
 
-    const questao = questaoResult.rows[0];
+  await db.query(
+    `INSERT INTO historico_respostas (firebase_uid, questao_id, acertou, nota, resposta_aluno, feedback_ia)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [uid, questaoId, nota >= config.notaMinimaAcerto, nota, resposta || null, feedback],
+  );
 
-    // 2. Enviar à IA para correção
-    const prompt = `Atue como um corretor rigoroso. 
-Pergunta original: ${questao.pergunta}
-Padrão de resposta esperado: ${questao.gabarito}
-Resposta do aluno: "${resposta_aluno}"
-
-IMPORTANTE PARA QUESTÕES DE EXATAS/CÁLCULOS: Não exija que o aluno escreva a conta inteira. Se a resposta final do aluno estiver correta de acordo com o gabarito, dê nota máxima (100). Só corrija e explique a resolução caso o resultado final esteja incorreto.
-ALÉM DISSO: NÃO USE formatação LaTeX ou símbolos matemáticos especiais (como $, \\frac, \\log, etc) no seu feedback. Escreva fórmulas e contas em texto plano.
-
-Retorne ESTRITAMENTE em formato JSON com a seguinte estrutura:
-{
-  "nota": <numero de 0 a 100>,
-  "feedback_detalhado": "Sua explicação pedagógica detalhada do que o aluno acertou e onde errou."
-}`;
-
-    const response = await generateWithFallback({
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
-
-    let correcaoIA;
-    try {
-      correcaoIA = JSON.parse(response.text);
-    } catch (err) {
-      console.error("Falha ao fazer parse do JSON da IA:", response.text);
-      return res
-        .status(500)
-        .json({ error: "Erro ao interpretar resposta da IA." });
-    }
-
-    // 3. Salvar no historico_respostas
-    await db.query(
-      `INSERT INTO historico_respostas 
-             (firebase_uid, questao_id, acertou, nota, resposta_aluno, feedback_ia) 
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        firebase_uid,
-        questao_id,
-        correcaoIA.nota >= 70, // >= 70 é "acerto"
-        correcaoIA.nota,
-        resposta_aluno,
-        correcaoIA.feedback_detalhado,
-      ],
-    );
-
-    return res.json({ correcao: correcaoIA });
-  } catch (error) {
-    console.error("Erro na correção:", error);
-    return res
-      .status(500)
-      .json({ error: "Erro interno ao corrigir a questão." });
-  }
+  res.json({ correcao: { nota, feedback_detalhado: feedback } });
 });
 
 module.exports = router;

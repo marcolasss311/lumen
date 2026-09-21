@@ -1,10 +1,12 @@
-version: '3.8'
+# Postgres para desenvolvimento local. As credenciais vêm do backend/.env
+# (o docker compose lê esse arquivo automaticamente para substituir as variáveis).
 services:
   db:
     image: postgres:15
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password_super_segura
-      POSTGRES_DB: lumen_db
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no backend/.env}
+      POSTGRES_DB: ${DB_NAME:-lumen_db}
     ports:
-      - "5432:5432"
+      # Só acessível pela própria máquina, não pela rede local.
+      - "127.0.0.1:5432:5432"

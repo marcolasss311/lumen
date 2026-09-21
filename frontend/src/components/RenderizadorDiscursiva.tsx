@@ -1,18 +1,15 @@
 "use client";
 
 import TextoComTabela from "@/components/TextoComTabela";
+import type { Questao, ResultadoQuestao } from "@/lib/tipos";
 
 interface Props {
-  questao: any;
+  questao: Questao;
   index: number;
   modo: "prova" | "feedback";
   respostaSelecionada: string | null;
   onResponder: (resp: string) => void;
-  feedback?: {
-    acertou: boolean;
-    nota: number;
-    feedback_ia: string;
-  };
+  feedback?: ResultadoQuestao;
 }
 
 export default function RenderizadorDiscursiva({
@@ -81,7 +78,7 @@ export default function RenderizadorDiscursiva({
               </div>
 
               <TextoComTabela
-                texto={feedback.feedback_ia}
+                texto={feedback.feedback_ia || ""}
                 className="text-gray-800 dark:text-gray-300 text-sm leading-relaxed"
               />
             </div>

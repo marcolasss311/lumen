@@ -1,8 +1,9 @@
 import React from "react";
 import TextoComTabela from "./TextoComTabela";
+import type { Alternativa, Questao } from "@/lib/tipos";
 
 interface Props {
-  questoes: any[];
+  questoes: Questao[];
   alunoNome?: string;
   materia?: string;
 }
@@ -44,7 +45,7 @@ export const SimuladoParaImprimir = React.forwardRef<HTMLDivElement, Props>(
                     {(typeof q.alternativas === "string"
                       ? JSON.parse(q.alternativas)
                       : q.alternativas
-                    ).map((alt: any) => (
+                    ).map((alt: Alternativa) => (
                       <div key={alt.letra} className="flex gap-3">
                         <div className="w-6 h-6 border border-black rounded-full flex items-center justify-center font-bold shrink-0">
                           {alt.letra}

@@ -1,14 +1,11 @@
-const admin = require("firebase-admin");
-require("dotenv").config({ path: "../../.env" }); // Garantir leitura do .env
+const { initializeApp, getApps } = require("firebase-admin/app");
+const { getAuth } = require("firebase-admin/auth");
+const config = require("../config");
 
-try {
-  // Passando o projectId é suficiente para o verifyIdToken funcionar sem o arquivo JSON local
-  admin.initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID || "lumenm",
-  });
-  console.log("Firebase Admin inicializado com sucesso.");
-} catch (error) {
-  console.error("Erro ao inicializar Firebase Admin:", error);
+// Só o projectId é necessário para verificar ID tokens (as chaves públicas do Google são
+// baixadas e cacheadas pelo SDK). Não use arquivo de service account aqui.
+if (!getApps().length) {
+  initializeApp({ projectId: config.firebaseProjectId });
 }
 
-module.exports = admin;
+module.exports = { auth: getAuth() };

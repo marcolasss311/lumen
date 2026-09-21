@@ -31,3 +31,6 @@ yarn-error.log*
 # arquivos do SO
 .DS_Store
 Thumbs.db
+
+# backups do banco (contêm dados dos alunos)
+*.dump

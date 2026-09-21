@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Cache local do Firebase CLI (antigo deploy com frameworksBackend).
+    ".firebase/**",
   ]),
 ]);
 

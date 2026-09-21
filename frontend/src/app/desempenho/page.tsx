@@ -1,50 +1,81 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import dynamic from "next/dynamic";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import { api, mensagemDeErro } from "@/lib/api";
+import {
+  CHAVE_SIMULADO_SALVO,
+  type Questao,
+  type SimuladoGerado,
+  type SimuladoSalvo,
+} from "@/lib/tipos";
+import type { EstatisticaMateria } from "@/components/GraficoDesempenho";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   ArrowLeft,
   BarChart2,
-  Hexagon,
   History,
   Home as HomeIcon,
   RotateCcw,
+  Printer,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
-} from "recharts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Link from "next/link";
 import { useReactToPrint } from "react-to-print";
-import { Printer } from "lucide-react";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
 import TextoComTabela from "@/components/TextoComTabela";
 import LoadingScreen from "@/components/LoadingScreen";
-import { useRef } from "react";
+
+// O recharts só é baixado quando o gráfico aparece na tela.
+const GraficoDesempenho = dynamic(() => import("@/components/GraficoDesempenho"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
+});
+
+interface EstatisticaApi {
+  materia: string;
+  total_tentativas: string;
+  media_nota: string;
+}
+
+interface SimuladoResumo {
+  id: string;
+  nome: string;
+  nota_geral: string | number;
+  data_realizacao: string;
+}
+
+interface QuestaoHistorico extends Questao {
+  resposta_aluno: string | null;
+  feedback_ia: string | null;
+  nota: string | number | null;
+  acertou: boolean | null;
+}
+
+interface DetalheSimulado {
+  simulado: SimuladoResumo;
+  questoes: QuestaoHistorico[];
+}
+
+type SimuladoDetalhado = SimuladoResumo & { questoes: QuestaoHistorico[] };
 
 export default function Desempenho() {
   const [user, setUser] = useState<User | null>(() => auth.currentUser);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any[]>([]);
-  const [historico, setHistorico] = useState<any[]>([]);
+  const [stats, setStats] = useState<EstatisticaMateria[]>([]);
+  const [historico, setHistorico] = useState<SimuladoResumo[]>([]);
   const [tipoGrafico, setTipoGrafico] = useState<"Barra" | "Radar">("Barra");
-  const [simuladoAtivo, setSimuladoAtivo] = useState<any>(null);
+  const [simuladoAtivo, setSimuladoAtivo] = useState<SimuladoDetalhado | null>(null);
   const [carregandoDetalhes, setCarregandoDetalhes] = useState(false);
+  const [refazendoId, setRefazendoId] = useState<string | null>(null);
   const router = useRouter();
 
   const printRef = useRef<HTMLDivElement>(null);
@@ -55,106 +86,41 @@ export default function Desempenho() {
   const carregarDetalhesSimulado = async (id: string) => {
     setCarregandoDetalhes(true);
     try {
-      const token = await user?.getIdToken();
-      const res = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL}/desempenho/simulado/${id}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-
-      const simuladoData = res.data;
-      const questoesFormatadas = simuladoData.questoes.map((q: any) => ({
-        id: q.id || q.questao_id,
-        pergunta: q.pergunta,
-        materia: q.materia,
-        topico: q.topico,
-        tipo_questao: q.tipo_questao,
-        alternativas: q.alternativas,
-        gabarito: q.gabarito,
-        origem: q.origem || "Oficial",
-        resposta_aluno: q.resposta_aluno,
-        feedback_ia: q.feedback_ia,
-        nota: q.nota,
-        acertou: q.acertou,
-      }));
-
+      const simuladoData = await api<DetalheSimulado>(`/desempenho/simulado/${id}`);
       setSimuladoAtivo({
         ...simuladoData.simulado,
-        questoes: questoesFormatadas,
+        questoes: simuladoData.questoes.map((q) => ({ ...q, origem: q.origem || "Oficial" })),
       });
     } catch (err) {
       console.error("Erro ao carregar detalhes", err);
-      alert("Erro ao carregar os detalhes do simulado.");
+      alert(mensagemDeErro(err, "Erro ao carregar os detalhes do simulado."));
     } finally {
       setCarregandoDetalhes(false);
     }
   };
 
-  const refazerSimulado = (simulado: any) => {
-    if (!simulado || !simulado.questoes || simulado.questoes.length === 0)
-      return;
-
-    const questoesLimpas = simulado.questoes.map((q: any) => ({
-      id: q.id,
-      pergunta: q.pergunta,
-      materia: q.materia,
-      topico: q.topico,
-      tipo_questao: q.tipo_questao,
-      alternativas: q.alternativas,
-      gabarito: q.gabarito,
-      origem: q.origem,
-    }));
-
-    let nomeTentativa = simulado.nome || "Simulado";
-    if (!nomeTentativa.includes("(Nova Tentativa)")) {
-      nomeTentativa = `${nomeTentativa} (Nova Tentativa)`;
-    }
-
-    localStorage.setItem(
-      "@lumen:simuladoAtivo",
-      JSON.stringify({
-        questoes: questoesLimpas,
+  // O servidor cria uma nova tentativa com as mesmas questões (sem o gabarito)
+  // e o dashboard abre com ela.
+  const refazerSimulado = async (id: string) => {
+    setRefazendoId(id);
+    try {
+      const res = await api<SimuladoGerado>(`/simulado/${id}/refazer`, { method: "POST" });
+      const estado: SimuladoSalvo = {
+        simuladoId: res.simulado_id,
+        questoes: res.questoes,
         respostas: {},
         resultados: null,
         paginaAtual: 1,
         simuladoFinalizado: false,
         notaGeral: null,
-        nomeSimuladoCustom: nomeTentativa,
-      }),
-    );
-
-    router.push("/dashboard");
-  };
-
-  const carregarEDepoisRefazer = async (id: string) => {
-    try {
-      const token = await user?.getIdToken();
-      const res = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL}/desempenho/simulado/${id}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      const simuladoData = res.data;
-      const questoesFormatadas = simuladoData.questoes.map((q: any) => ({
-        id: q.id || q.questao_id,
-        pergunta: q.pergunta,
-        materia: q.materia,
-        topico: q.topico,
-        tipo_questao: q.tipo_questao,
-        alternativas: q.alternativas,
-        gabarito: q.gabarito,
-        origem: q.origem || "Oficial",
-      }));
-
-      refazerSimulado({
-        ...simuladoData.simulado,
-        questoes: questoesFormatadas,
-      });
+        nomeSimuladoCustom: res.nome,
+      };
+      localStorage.setItem(CHAVE_SIMULADO_SALVO, JSON.stringify(estado));
+      router.push("/dashboard");
     } catch (err) {
-      console.error("Erro ao carregar simulado para refazer", err);
-      alert("Não foi possível carregar o simulado para refazer.");
+      console.error("Erro ao refazer simulado", err);
+      alert(mensagemDeErro(err, "Não foi possível carregar o simulado para refazer."));
+      setRefazendoId(null);
     }
   };
 
@@ -165,16 +131,12 @@ export default function Desempenho() {
       } else {
         setUser(currentUser);
         try {
-          const token = await currentUser.getIdToken();
-          const res = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}/desempenho`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            },
+          const res = await api<{ estatisticas: EstatisticaApi[]; historico: SimuladoResumo[] }>(
+            "/desempenho",
           );
 
           // Formata as estatísticas para os gráficos
-          const statsFormatadas = res.data.estatisticas.map((s: any) => ({
+          const statsFormatadas = res.estatisticas.map((s) => ({
             subject: s.materia,
             A: Number(s.media_nota),
             fullMark: 100,
@@ -182,7 +144,7 @@ export default function Desempenho() {
           }));
 
           setStats(statsFormatadas);
-          setHistorico(res.data.historico);
+          setHistorico(res.historico);
         } catch (err) {
           console.error("Erro ao buscar dados", err);
         }
@@ -255,50 +217,8 @@ export default function Desempenho() {
                 <div className="h-full flex items-center justify-center text-gray-400">
                   Nenhum dado suficiente. Faça alguns simulados!
                 </div>
-              ) : tipoGrafico === "Barra" ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={stats}
-                    layout="vertical"
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <XAxis type="number" domain={[0, 100]} />
-                    <YAxis
-                      dataKey="subject"
-                      type="category"
-                      width={100}
-                      tick={{ fontSize: 12 }}
-                    />
-                    <Tooltip
-                      formatter={(value) => `${Number(value).toFixed(1)}%`}
-                      cursor={{ fill: "transparent" }}
-                    />
-                    <Bar
-                      dataKey="A"
-                      fill="#3b82f6"
-                      radius={[0, 4, 4, 0]}
-                      name="Média de Nota"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="70%" data={stats}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="subject" tick={{ fontSize: 12 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                    <Radar
-                      name="Média"
-                      dataKey="A"
-                      stroke="#3b82f6"
-                      fill="#3b82f6"
-                      fillOpacity={0.5}
-                    />
-                    <Tooltip
-                      formatter={(value) => `${Number(value).toFixed(1)}%`}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
+                <GraficoDesempenho stats={stats} tipo={tipoGrafico} />
               )}
             </div>
           </div>
@@ -352,12 +272,14 @@ export default function Desempenho() {
                           <button
                             onClick={async (e) => {
                               e.stopPropagation();
-                              await carregarEDepoisRefazer(h.id);
+                              await refazerSimulado(h.id);
                             }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white dark:bg-blue-900/40 dark:hover:bg-blue-600 dark:text-blue-300 dark:hover:text-white rounded-lg border border-blue-200 dark:border-blue-800 transition-all shadow-xs"
+                            disabled={refazendoId !== null}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white dark:bg-blue-900/40 dark:hover:bg-blue-600 dark:text-blue-300 dark:hover:text-white rounded-lg border border-blue-200 dark:border-blue-800 transition-all shadow-xs disabled:opacity-50"
                             title="Refazer este simulado com as mesmas questões"
                           >
-                            <RotateCcw size={14} /> Refazer
+                            <RotateCcw size={14} />{" "}
+                            {refazendoId === h.id ? "Abrindo..." : "Refazer"}
                           </button>
                         </div>
                       </div>
@@ -394,11 +316,13 @@ export default function Desempenho() {
                       </div>
                     </div>
                     <button
-                      onClick={() => refazerSimulado(simuladoAtivo)}
-                      className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md transition-colors text-sm h-fit font-medium shadow-xs"
+                      onClick={() => refazerSimulado(simuladoAtivo.id)}
+                      disabled={refazendoId !== null}
+                      className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md transition-colors text-sm h-fit font-medium shadow-xs disabled:opacity-50"
                       title="Refazer este simulado com as mesmas questões"
                     >
-                      <RotateCcw size={15} /> Refazer Prova
+                      <RotateCcw size={15} />{" "}
+                      {refazendoId === simuladoAtivo.id ? "Abrindo..." : "Refazer Prova"}
                     </button>
                     <button
                       onClick={() => handlePrint()}
@@ -416,7 +340,7 @@ export default function Desempenho() {
                       <p className="text-sm">Carregando detalhes do simulado...</p>
                     </div>
                   ) : (
-                    simuladoAtivo.questoes.map((q: any, idx: number) => (
+                    simuladoAtivo.questoes.map((q, idx) => (
                       <div
                         key={idx}
                         className="p-4 border dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900/50"
