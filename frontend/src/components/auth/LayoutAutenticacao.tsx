@@ -26,7 +26,7 @@ const PAINEL: Record<Modo, { fundo: string; titulo: string; texto: string; itens
     titulo: "Estude do seu jeito, com IA.",
     texto: "Crie sua conta gratuita e comece a treinar em poucos segundos.",
     itens: [
-      { icone: BookOpenCheck, texto: "Simulados de qualquer matéria, do Fundamental à faculdade" },
+      { icone: BookOpenCheck, texto: "Simulados de qualquer matéria, do Fundamental ao Ensino Superior" },
       { icone: FileText, texto: "Questões criadas a partir dos seus PDFs e anotações" },
       { icone: CheckCircle2, texto: "Correção detalhada das questões discursivas" },
       { icone: BarChart3, texto: "Acompanhamento do seu desempenho" },
