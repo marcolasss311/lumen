@@ -16,20 +16,18 @@ import {
   type SimuladoSalvo,
 } from "@/lib/tipos";
 import { useTemposMedios } from "@/lib/useTemposMedios";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import CabecalhoApp from "@/components/app/CabecalhoApp";
+import TituloPagina from "@/components/app/TituloPagina";
 import { useAvisos } from "@/components/Avisos";
 import EsperaIA from "@/components/EsperaIA";
 import DialogoConfirmacao from "@/components/DialogoConfirmacao";
 import {
-  Eye,
-  EyeOff,
   Maximize,
   Minimize,
   Plus,
   X,
   Printer,
   BarChart2,
-  Home as HomeIcon,
   RotateCcw,
   FileText,
   UploadCloud,
@@ -37,7 +35,10 @@ import {
   BookOpen,
   Paperclip,
   Trash2,
-  LogOut,
+  ClipboardList,
+  SlidersHorizontal,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
@@ -67,7 +68,17 @@ const MATERIAS = [
   "Inglês",
   "Espanhol",
 ];
-const ANOS_FUNDAMENTAL = ["1º Ano", "2º Ano", "3º Ano", "4º Ano", "5º Ano", "6º Ano", "7º Ano", "8º Ano", "9º Ano"];
+const ANOS_FUNDAMENTAL = [
+  "1º Ano",
+  "2º Ano",
+  "3º Ano",
+  "4º Ano",
+  "5º Ano",
+  "6º Ano",
+  "7º Ano",
+  "8º Ano",
+  "9º Ano",
+];
 const ANOS_MEDIO = ["1º Ano EM", "2º Ano EM", "3º Ano EM", "Pré-Vestibular/ENEM"];
 
 type Nivel = "fundamental" | "medio" | "superior";
@@ -121,7 +132,9 @@ function BotaoOpcao({
       aria-pressed={ativo}
       onClick={onClick}
       className={`flex items-center justify-center gap-1.5 py-2 px-1.5 text-[13px] font-semibold rounded-lg transition-all whitespace-nowrap ${
-        ativo ? corAtiva : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+        ativo
+          ? corAtiva
+          : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
       }`}
     >
       {children}
@@ -162,22 +175,30 @@ function DashboardContent() {
   const [simuladoId, setSimuladoId] = useState<string | null>(salvo?.simuladoId ?? null);
   const [questoes, setQuestoes] = useState<Questao[]>(salvo?.questoes ?? []);
   const [respostas, setRespostas] = useState<{ [id: string]: string }>(salvo?.respostas ?? {});
-  const [resultados, setResultados] = useState<ResultadoQuestao[] | null>(salvo?.resultados ?? null);
+  const [resultados, setResultados] = useState<ResultadoQuestao[] | null>(
+    salvo?.resultados ?? null
+  );
   const [paginaAtual, setPaginaAtual] = useState(salvo?.paginaAtual ?? 1);
   const [simuladoFinalizado, setSimuladoFinalizado] = useState(salvo?.simuladoFinalizado ?? false);
   const [notaGeral, setNotaGeral] = useState<number | null>(salvo?.notaGeral ?? null);
-  const [nomeSimuladoCustom, setNomeSimuladoCustom] = useState<string | null>(salvo?.nomeSimuladoCustom ?? null);
+  const [nomeSimuladoCustom, setNomeSimuladoCustom] = useState<string | null>(
+    salvo?.nomeSimuladoCustom ?? null
+  );
   const [gerando, setGerando] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
   const [refazendo, setRefazendo] = useState(false);
   const [confirmandoNovo, setConfirmandoNovo] = useState(false);
 
-  const [showEmail, setShowEmail] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
+  // Ao reabrir a página com um simulado em andamento, começa com o painel recolhido.
+  const [focusMode, setFocusMode] = useState(() => Boolean(salvo?.questoes?.length));
 
   // Criação a partir de material próprio (PDF / anotações)
-  const [modoCriacao, setModoCriacao] = useState<"curriculo" | "material">("curriculo");
-  const [arquivosMaterial, setArquivosMaterial] = useState<{ arquivo: File; nome: string; tamanho: number }[]>([]);
+  const [modoCriacao, setModoCriacao] = useState<"curriculo" | "material">(() =>
+    searchParams.get("modo") === "material" ? "material" : "curriculo"
+  );
+  const [arquivosMaterial, setArquivosMaterial] = useState<
+    { arquivo: File; nome: string; tamanho: number }[]
+  >([]);
   const [textoMaterial, setTextoMaterial] = useState("");
   const [exibirAnotacoes, setExibirAnotacoes] = useState(false);
   const [nomeMateriaMaterial, setNomeMateriaMaterial] = useState("");
@@ -222,7 +243,16 @@ function DashboardContent() {
     } catch {
       // Sem espaço ou armazenamento bloqueado: o simulado continua funcionando, só não persiste.
     }
-  }, [simuladoId, questoes, respostas, resultados, paginaAtual, simuladoFinalizado, notaGeral, nomeSimuladoCustom]);
+  }, [
+    simuladoId,
+    questoes,
+    respostas,
+    resultados,
+    paginaAtual,
+    simuladoFinalizado,
+    notaGeral,
+    nomeSimuladoCustom,
+  ]);
 
   const escolherNivel = (nivel: Nivel) => {
     setNivelSegmento(nivel);
@@ -274,12 +304,16 @@ function DashboardContent() {
 
     if (modoCriacao === "material") {
       if (arquivosMaterial.length === 0 && !textoMaterial.trim()) {
-        return avisar("erro", "Envie ao menos um arquivo (PDF, TXT ou MD) ou escreva suas anotações de estudo.");
+        return avisar(
+          "erro",
+          "Envie ao menos um arquivo (PDF, TXT ou MD) ou escreva suas anotações de estudo."
+        );
       }
     } else if (nivelSegmento === "superior") {
       if (!curso.trim()) return avisar("erro", "Digite o seu curso de graduação.");
       if (!disciplina.trim()) return avisar("erro", "Digite a disciplina da faculdade.");
-      if (topicos.length === 0) return avisar("erro", "Adicione ao menos um tópico ou conteúdo da disciplina.");
+      if (topicos.length === 0)
+        return avisar("erro", "Adicione ao menos um tópico ou conteúdo da disciplina.");
     } else {
       if (modoMateria === "Múltiplas" && materiasMultiplas.length === 0) {
         return avisar("erro", "Selecione ao menos uma matéria.");
@@ -313,7 +347,7 @@ function DashboardContent() {
             tipo_questao: tipoQuestao,
             dificuldade,
             nivel: nivelSegmento,
-          }),
+          })
         );
         for (const a of arquivosMaterial) form.append("arquivos", a.arquivo, a.nome);
         body = form;
@@ -337,10 +371,15 @@ function DashboardContent() {
         };
       }
 
-      const res = await api<SimuladoGerado>("/simulado/gerar", { method: "POST", body, timeoutMs: TIMEOUT_IA_MS });
+      const res = await api<SimuladoGerado>("/simulado/gerar", {
+        method: "POST",
+        body,
+        timeoutMs: TIMEOUT_IA_MS,
+      });
       setSimuladoId(res.simulado_id);
       setQuestoes(res.questoes);
-      if (modoCriacao === "material") setNomeSimuladoCustom(res.nome);
+      // O servidor devolve o nome definitivo (ex.: "Simulado de Biologia - 21/09/2026").
+      setNomeSimuladoCustom(res.nome);
       setFocusMode(true);
     } catch (error) {
       console.error("Erro ao gerar simulado", error);
@@ -348,7 +387,10 @@ function DashboardContent() {
         "erro",
         error instanceof ApiError && error.status >= 500 && error.status !== 503
           ? `Não foi possível gerar o simulado: ${error.message}`
-          : mensagemDeErro(error, "Erro ao gerar simulado. Verifique sua conexão e tente novamente."),
+          : mensagemDeErro(
+              error,
+              "Erro ao gerar simulado. Verifique sua conexão e tente novamente."
+            )
       );
     } finally {
       setGerando(false);
@@ -359,16 +401,26 @@ function DashboardContent() {
   const finalizarSimulado = async () => {
     if (!user || finalizando) return;
     if (!simuladoId) {
-      return avisar("erro", "Este simulado foi criado em uma versão anterior e não pode ser corrigido. Gere um novo simulado.");
+      return avisar(
+        "erro",
+        "Este simulado foi criado em uma versão anterior e não pode ser corrigido. Gere um novo simulado."
+      );
     }
     if (questoesRespondidas < questoes.length) {
-      return avisar("erro", `Ainda faltam ${questoes.length - questoesRespondidas} questão(ões) para responder.`);
+      return avisar(
+        "erro",
+        `Ainda faltam ${questoes.length - questoesRespondidas} questão(ões) para responder.`
+      );
     }
     setFinalizando(true);
     try {
       const res = await api<SimuladoCorrigido>("/simulado/finalizar", {
         method: "POST",
-        body: { simulado_id: simuladoId, respostas, nome_simulado: nomeSimuladoCustom || undefined },
+        body: {
+          simulado_id: simuladoId,
+          respostas,
+          nome_simulado: nomeSimuladoCustom || undefined,
+        },
         timeoutMs: TIMEOUT_IA_MS,
       });
       // As questões voltam com o gabarito liberado para exibir o feedback.
@@ -380,7 +432,13 @@ function DashboardContent() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("Erro ao finalizar simulado", error);
-      avisar("erro", mensagemDeErro(error, "Erro ao conectar com a IA de correção. Suas respostas foram mantidas; tente de novo."));
+      avisar(
+        "erro",
+        mensagemDeErro(
+          error,
+          "Erro ao conectar com a IA de correção. Suas respostas foram mantidas; tente de novo."
+        )
+      );
     } finally {
       setFinalizando(false);
     }
@@ -422,7 +480,10 @@ function DashboardContent() {
   const questoesRespondidas = questoes.filter((q) => (respostas[q.id] || "").trim() !== "").length;
   const faltam = questoes.length - questoesRespondidas;
   const totalPaginas = Math.ceil(questoes.length / ITENS_POR_PAGINA);
-  const paginadas = questoes.slice((paginaAtual - 1) * ITENS_POR_PAGINA, paginaAtual * ITENS_POR_PAGINA);
+  const paginadas = questoes.slice(
+    (paginaAtual - 1) * ITENS_POR_PAGINA,
+    paginaAtual * ITENS_POR_PAGINA
+  );
   const discursivas = questoes.filter((q) => q.tipo_questao === "Aberta").length;
 
   const irParaQuestao = (index: number) => {
@@ -439,7 +500,9 @@ function DashboardContent() {
 
   const mudarPagina = (pagina: number) => {
     setPaginaAtual(pagina);
-    document.getElementById("caderno-questoes")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document
+      .getElementById("caderno-questoes")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   if (loading) return <LoadingScreen text="Carregando painel..." />;
@@ -454,78 +517,111 @@ function DashboardContent() {
         : materiasMultiplas.join(", "));
 
   const tempoGeracao = modoCriacao === "material" ? tempos?.geracao_material : tempos?.geracao;
-  const emailExibido = showEmail ? user.email : user.email?.replace(/(.{2})(.*)(@.*)/, "$1***$3");
+
+  const temSimulado = questoes.length > 0 && !gerando;
+  const botaoFoco = (
+    <button
+      type="button"
+      onClick={() => setFocusMode(!focusMode)}
+      aria-pressed={focusMode}
+      className="p-2 rounded-lg text-gray-600 hover:text-blue-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-blue-400 dark:hover:bg-gray-800 transition-colors"
+      title={
+        focusMode
+          ? "Mostrar painel de configuração"
+          : "Modo foco: esconder o painel de configuração"
+      }
+    >
+      {focusMode ? (
+        <Minimize size={20} aria-hidden="true" />
+      ) : (
+        <Maximize size={20} aria-hidden="true" />
+      )}
+      <span className="sr-only">Modo foco</span>
+    </button>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-3 sm:p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <header className="flex flex-wrap justify-between items-center gap-3 mb-6 md:mb-8 bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-          <Link href="/home" className="flex items-center gap-2 text-xl font-bold text-blue-700 dark:text-blue-400">
-            <Sparkles size={22} aria-hidden="true" /> Lumen
-          </Link>
-          <nav aria-label="Principal" className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <Link
-              href="/home"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 dark:bg-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-            >
-              <HomeIcon size={16} aria-hidden="true" /> <span className="hidden sm:inline">Início</span>
-              <span className="sr-only sm:hidden">Início</span>
-            </Link>
-            <Link
-              href="/desempenho"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-300 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-            >
-              <BarChart2 size={16} aria-hidden="true" /> <span className="hidden sm:inline">Meu desempenho</span>
-              <span className="sr-only sm:hidden">Meu desempenho</span>
-            </Link>
-            <button
-              type="button"
-              onClick={() => setFocusMode(!focusMode)}
-              aria-pressed={focusMode}
-              className="p-2 rounded-md text-gray-600 hover:text-blue-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-blue-400 dark:hover:bg-gray-700 transition-colors"
-              title={focusMode ? "Mostrar painel de configuração" : "Modo foco: esconder o painel de configuração"}
-            >
-              {focusMode ? <Minimize size={20} aria-hidden="true" /> : <Maximize size={20} aria-hidden="true" />}
-              <span className="sr-only">Modo foco</span>
-            </button>
-            <ThemeToggle />
-            <div className="flex items-center gap-1 pl-3 pr-1 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">
-              <span className="text-sm text-gray-700 dark:text-gray-200 max-w-[10rem] sm:max-w-none truncate">{emailExibido}</span>
-              <button
-                type="button"
-                onClick={() => setShowEmail(!showEmail)}
-                className="p-1 rounded-full text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
-                aria-label={showEmail ? "Ocultar e-mail" : "Mostrar e-mail"}
-                aria-pressed={showEmail}
-              >
-                {showEmail ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => auth.signOut()}
-              className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
-            >
-              <LogOut size={16} aria-hidden="true" /> Sair
-            </button>
-          </nav>
-        </header>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <CabecalhoApp usuario={user} extra={botaoFoco} />
 
-        <main id="conteudo" className="grid grid-cols-1 lg:grid-cols-[20rem_minmax(0,1fr)] gap-6">
-          <h1 className="sr-only">Criar e responder simulado</h1>
+      <main id="conteudo" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8">
+        <TituloPagina
+          icone={temSimulado ? ClipboardList : Sparkles}
+          rotulo={
+            temSimulado
+              ? simuladoFinalizado
+                ? "Simulado corrigido"
+                : "Simulado em andamento"
+              : "Novo simulado"
+          }
+          titulo={
+            temSimulado
+              ? tituloCaderno
+              : modoCriacao === "material"
+                ? "Estude pelo seu material"
+                : "Monte seu simulado"
+          }
+          cor={!temSimulado && modoCriacao === "material" ? "verde" : "azul"}
+          subtitulo={
+            temSimulado
+              ? `${questoes.length} ${questoes.length === 1 ? "questão" : "questões"} · ${questoesRespondidas} ${
+                  questoesRespondidas === 1 ? "respondida" : "respondidas"
+                }`
+              : "Configure no painel e a IA monta as questões em segundos."
+          }
+          acoes={
+            temSimulado ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setConfirmandoNovo(true)}
+                  className="flex items-center gap-1.5 text-sm text-gray-800 dark:text-gray-200 font-medium px-3.5 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <RotateCcw size={15} aria-hidden="true" /> Novo simulado
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrint()}
+                  className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-3.5 py-2 rounded-lg transition-colors text-sm font-medium shadow-sm"
+                >
+                  <Printer size={16} aria-hidden="true" /> Exportar PDF
+                </button>
+              </>
+            ) : undefined
+          }
+        />
 
+        <div className="grid grid-cols-1 lg:grid-cols-[20rem_minmax(0,1fr)] gap-6">
           {!focusMode && (
             <form
               onSubmit={gerarSimulado}
               aria-labelledby={`${ids}-titulo-config`}
-              className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 space-y-5 self-start"
+              className={`bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 space-y-5 self-start ${
+                temSimulado ? "order-2 lg:order-1" : ""
+              }`}
             >
-              <h2 id={`${ids}-titulo-config`} className="font-semibold text-lg border-b border-gray-200 dark:border-gray-700 pb-2">
+              <h2
+                id={`${ids}-titulo-config`}
+                className="flex items-center gap-2 font-bold text-lg text-gray-900 dark:text-white"
+              >
+                <span
+                  className="w-8 h-8 rounded-lg bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 flex items-center justify-center"
+                  aria-hidden="true"
+                >
+                  <SlidersHorizontal size={16} />
+                </span>
                 Configurar simulado
               </h2>
 
-              <div role="group" aria-label="Como criar as questões" className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-gray-700/60 p-1 rounded-xl">
-                <BotaoOpcao ativo={modoCriacao === "curriculo"} onClick={() => setModoCriacao("curriculo")}>
+              <div
+                role="group"
+                aria-label="Como criar as questões"
+                className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-gray-700/60 p-1 rounded-xl"
+              >
+                <BotaoOpcao
+                  ativo={modoCriacao === "curriculo"}
+                  onClick={() => setModoCriacao("curriculo")}
+                >
                   <BookOpen size={15} aria-hidden="true" /> Por matéria
                 </BotaoOpcao>
                 <BotaoOpcao
@@ -541,10 +637,15 @@ function DashboardContent() {
                 <div className="space-y-4">
                   <div>
                     <div className="flex justify-between items-baseline mb-1.5">
-                      <span id={`${ids}-arquivos-rotulo`} className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <span
+                        id={`${ids}-arquivos-rotulo`}
+                        className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                      >
                         Arquivos de aula
                       </span>
-                      <span className="text-xs text-gray-600 dark:text-gray-400">até {MAX_ARQUIVOS} arquivos</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                        até {MAX_ARQUIVOS} arquivos
+                      </span>
                     </div>
 
                     {/* Input visível para o teclado (sr-only), mas representado pela área de arrastar. */}
@@ -576,12 +677,20 @@ function DashboardContent() {
                           : "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"
                       }`}
                     >
-                      <UploadCloud size={28} className="text-gray-500 dark:text-gray-400 mb-2" aria-hidden="true" />
+                      <UploadCloud
+                        size={28}
+                        className="text-gray-500 dark:text-gray-400 mb-2"
+                        aria-hidden="true"
+                      />
                       <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
                         {arrastando ? "Solte os arquivos aqui" : "Clique ou arraste seus arquivos"}
                       </span>
-                      <span id={`${ids}-arquivos-dica`} className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                        PDF, TXT ou MD · até {MAX_BYTES_ARQUIVO / MB} MB cada, {MAX_BYTES_TOTAL / MB} MB no total
+                      <span
+                        id={`${ids}-arquivos-dica`}
+                        className="text-xs text-gray-600 dark:text-gray-400 mt-0.5"
+                      >
+                        PDF, TXT ou MD · até {MAX_BYTES_ARQUIVO / MB} MB cada,{" "}
+                        {MAX_BYTES_TOTAL / MB} MB no total
                       </span>
                     </label>
 
@@ -593,8 +702,15 @@ function DashboardContent() {
                             className="flex items-center justify-between p-2 rounded-lg bg-blue-50/70 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-sm"
                           >
                             <span className="flex items-center gap-2 min-w-0 pr-2">
-                              <FileText size={16} className="text-blue-600 dark:text-blue-400 shrink-0" aria-hidden="true" />
-                              <span className="font-medium text-gray-800 dark:text-gray-100 truncate" title={arq.nome}>
+                              <FileText
+                                size={16}
+                                className="text-blue-600 dark:text-blue-400 shrink-0"
+                                aria-hidden="true"
+                              />
+                              <span
+                                className="font-medium text-gray-800 dark:text-gray-100 truncate"
+                                title={arq.nome}
+                              >
                                 {arq.nome}
                               </span>
                               <span className="text-gray-600 dark:text-gray-400 shrink-0 text-xs">
@@ -603,7 +719,9 @@ function DashboardContent() {
                             </span>
                             <button
                               type="button"
-                              onClick={() => setArquivosMaterial((prev) => prev.filter((_, i) => i !== idx))}
+                              onClick={() =>
+                                setArquivosMaterial((prev) => prev.filter((_, i) => i !== idx))
+                              }
                               className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 p-1 rounded"
                               aria-label={`Remover o arquivo ${arq.nome}`}
                             >
@@ -644,7 +762,10 @@ function DashboardContent() {
 
                   <div>
                     <label htmlFor={`${ids}-nome-material`} className={ESTILO_ROTULO}>
-                      Nome da matéria <span className="font-normal text-gray-600 dark:text-gray-400">(opcional)</span>
+                      Nome da matéria{" "}
+                      <span className="font-normal text-gray-600 dark:text-gray-400">
+                        (opcional)
+                      </span>
                     </label>
                     <input
                       id={`${ids}-nome-material`}
@@ -662,7 +783,11 @@ function DashboardContent() {
                     <span id={`${ids}-nivel`} className={ESTILO_ROTULO}>
                       Nível de ensino
                     </span>
-                    <div role="group" aria-labelledby={`${ids}-nivel`} className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg">
+                    <div
+                      role="group"
+                      aria-labelledby={`${ids}-nivel`}
+                      className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg"
+                    >
                       {NIVEIS.map((n) => (
                         <BotaoOpcao
                           key={n.id}
@@ -715,10 +840,17 @@ function DashboardContent() {
                         <label htmlFor={`${ids}-ano`} className={ESTILO_ROTULO}>
                           Ano escolar
                         </label>
-                        <select id={`${ids}-ano`} className={ESTILO_CAMPO} value={anoEscolar} onChange={(e) => setAnoEscolar(e.target.value)}>
-                          {(nivelSegmento === "fundamental" ? ANOS_FUNDAMENTAL : ANOS_MEDIO).map((ano) => (
-                            <option key={ano}>{ano}</option>
-                          ))}
+                        <select
+                          id={`${ids}-ano`}
+                          className={ESTILO_CAMPO}
+                          value={anoEscolar}
+                          onChange={(e) => setAnoEscolar(e.target.value)}
+                        >
+                          {(nivelSegmento === "fundamental" ? ANOS_FUNDAMENTAL : ANOS_MEDIO).map(
+                            (ano) => (
+                              <option key={ano}>{ano}</option>
+                            )
+                          )}
                         </select>
                       </div>
 
@@ -726,11 +858,21 @@ function DashboardContent() {
                         <span id={`${ids}-modo-materia`} className={ESTILO_ROTULO}>
                           Matérias
                         </span>
-                        <div role="group" aria-labelledby={`${ids}-modo-materia`} className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg mb-2">
-                          <BotaoOpcao ativo={modoMateria === "Única"} onClick={() => setModoMateria("Única")}>
+                        <div
+                          role="group"
+                          aria-labelledby={`${ids}-modo-materia`}
+                          className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg mb-2"
+                        >
+                          <BotaoOpcao
+                            ativo={modoMateria === "Única"}
+                            onClick={() => setModoMateria("Única")}
+                          >
                             Uma matéria
                           </BotaoOpcao>
-                          <BotaoOpcao ativo={modoMateria === "Múltiplas"} onClick={() => setModoMateria("Múltiplas")}>
+                          <BotaoOpcao
+                            ativo={modoMateria === "Múltiplas"}
+                            onClick={() => setModoMateria("Múltiplas")}
+                          >
                             Várias
                           </BotaoOpcao>
                         </div>
@@ -740,7 +882,12 @@ function DashboardContent() {
                             <label htmlFor={`${ids}-materia`} className="sr-only">
                               Matéria
                             </label>
-                            <select id={`${ids}-materia`} className={ESTILO_CAMPO} value={materiaUnica} onChange={(e) => setMateriaUnica(e.target.value)}>
+                            <select
+                              id={`${ids}-materia`}
+                              className={ESTILO_CAMPO}
+                              value={materiaUnica}
+                              onChange={(e) => setMateriaUnica(e.target.value)}
+                            >
                               {MATERIAS.map((m) => (
                                 <option key={m}>{m}</option>
                               ))}
@@ -750,14 +897,19 @@ function DashboardContent() {
                           <fieldset className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 space-y-1">
                             <legend className="sr-only">Escolha as matérias</legend>
                             {MATERIAS.map((mat) => (
-                              <label key={mat} className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200 py-0.5">
+                              <label
+                                key={mat}
+                                className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200 py-0.5"
+                              >
                                 <input
                                   type="checkbox"
                                   className="w-4 h-4 accent-blue-600"
                                   checked={materiasMultiplas.includes(mat)}
                                   onChange={(e) =>
                                     setMateriasMultiplas(
-                                      e.target.checked ? [...materiasMultiplas, mat] : materiasMultiplas.filter((m) => m !== mat),
+                                      e.target.checked
+                                        ? [...materiasMultiplas, mat]
+                                        : materiasMultiplas.filter((m) => m !== mat)
                                     )
                                   }
                                 />
@@ -782,7 +934,9 @@ function DashboardContent() {
                         value={novoTopico}
                         onChange={(e) => setNovoTopico(e.target.value)}
                         aria-describedby={`${ids}-topico-dica`}
-                        placeholder={nivelSegmento === "superior" ? "Ex.: Derivadas" : "Ex.: Frações"}
+                        placeholder={
+                          nivelSegmento === "superior" ? "Ex.: Derivadas" : "Ex.: Frações"
+                        }
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault(); // Enter adiciona o tópico em vez de enviar o formulário
@@ -799,13 +953,19 @@ function DashboardContent() {
                         <Plus size={20} aria-hidden="true" />
                       </button>
                     </div>
-                    <p id={`${ids}-topico-dica`} className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    <p
+                      id={`${ids}-topico-dica`}
+                      className="text-xs text-gray-600 dark:text-gray-400 mt-1"
+                    >
                       Digite e pressione Enter para adicionar cada tópico.
                     </p>
                     {topicos.length > 0 && (
                       <ul className="flex flex-wrap gap-2 mt-2" aria-label="Tópicos escolhidos">
                         {topicos.map((t) => (
-                          <li key={t} className="flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 pl-2 pr-1 py-1 rounded text-sm">
+                          <li
+                            key={t}
+                            className="flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 pl-2 pr-1 py-1 rounded text-sm"
+                          >
                             {t}
                             <button
                               type="button"
@@ -843,7 +1003,12 @@ function DashboardContent() {
                 <label htmlFor={`${ids}-tipo`} className={ESTILO_ROTULO}>
                   Tipo de questão
                 </label>
-                <select id={`${ids}-tipo`} className={ESTILO_CAMPO} value={tipoQuestao} onChange={(e) => setTipoQuestao(e.target.value)}>
+                <select
+                  id={`${ids}-tipo`}
+                  className={ESTILO_CAMPO}
+                  value={tipoQuestao}
+                  onChange={(e) => setTipoQuestao(e.target.value)}
+                >
                   <option value="Fechada">Múltipla escolha</option>
                   <option value="Aberta">Discursiva (aberta)</option>
                   <option value="Mesclada">Mesclada (múltipla + discursiva)</option>
@@ -854,12 +1019,21 @@ function DashboardContent() {
                 <label htmlFor={`${ids}-dificuldade`} className={ESTILO_ROTULO}>
                   Nível de dificuldade
                 </label>
-                <select id={`${ids}-dificuldade`} className={ESTILO_CAMPO} value={dificuldade} onChange={(e) => setDificuldade(e.target.value)}>
+                <select
+                  id={`${ids}-dificuldade`}
+                  className={ESTILO_CAMPO}
+                  value={dificuldade}
+                  onChange={(e) => setDificuldade(e.target.value)}
+                >
                   {modoCriacao === "material" || nivelSegmento === "superior" ? (
                     <>
                       <option>Iniciante (Conceitual / Básico)</option>
                       <option>Intermediário (Padrão de Prova)</option>
-                      <option>{nivelSegmento === "superior" ? "Avançado (Exames / ENADE / OAB)" : "Avançado (Exames / Padrão Universitário)"}</option>
+                      <option>
+                        {nivelSegmento === "superior"
+                          ? "Avançado (Exames / ENADE / OAB)"
+                          : "Avançado (Exames / Padrão Universitário)"}
+                      </option>
                     </>
                   ) : (
                     <>
@@ -888,47 +1062,26 @@ function DashboardContent() {
                 className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm transition-all"
               >
                 <Sparkles size={16} aria-hidden="true" />
-                {gerando ? "Gerando..." : modoCriacao === "material" ? "Gerar a partir do material" : "Gerar simulado"}
+                {gerando
+                  ? "Gerando..."
+                  : modoCriacao === "material"
+                    ? "Gerar a partir do material"
+                    : "Gerar simulado"}
               </button>
-              {tempoGeracao && tempoGeracao.amostras > 0 && (
-                <p className="text-xs text-center text-gray-600 dark:text-gray-400 -mt-2">
-                  Tempo médio de geração: ~{tempoGeracao.segundos} s
-                </p>
-              )}
             </form>
           )}
 
-          <div className={focusMode ? "lg:col-span-2" : "min-w-0"}>
-            {questoes.length > 0 && !gerando ? (
+          {/* No celular, com um simulado aberto, as questões vêm antes do painel de configuração. */}
+          <div
+            className={`${focusMode ? "lg:col-span-2" : "min-w-0"} ${temSimulado ? "order-1 lg:order-2" : ""}`}
+          >
+            {temSimulado ? (
               <div className="flex flex-col xl:flex-row gap-6 justify-center items-start w-full">
-                <section id="caderno-questoes" aria-label="Caderno de questões" className="w-full max-w-4xl space-y-6 flex-1 scroll-mt-4">
-                  <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-wrap justify-between items-center gap-4">
-                    <div className="min-w-0">
-                      <p className="text-xs uppercase tracking-wider font-bold text-blue-700 dark:text-blue-300">Caderno de questões</p>
-                      <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1 break-words">{tituloCaderno}</h2>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                        {questoes.length} {questoes.length === 1 ? "questão" : "questões"} · {questoesRespondidas}{" "}
-                        {questoesRespondidas === 1 ? "respondida" : "respondidas"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setConfirmandoNovo(true)}
-                        className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-red-700 dark:text-gray-300 dark:hover:text-red-400 font-medium px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        <RotateCcw size={15} aria-hidden="true" /> Novo simulado
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePrint()}
-                        className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-3.5 py-2 rounded-lg transition-colors text-sm font-medium shadow-sm"
-                      >
-                        <Printer size={16} aria-hidden="true" /> Exportar PDF
-                      </button>
-                    </div>
-                  </div>
-
+                <section
+                  id="caderno-questoes"
+                  aria-label="Caderno de questões"
+                  className="w-full max-w-4xl space-y-6 flex-1 scroll-mt-4"
+                >
                   {finalizando && discursivas > 0 && (
                     <EsperaIA
                       compacto
@@ -940,33 +1093,50 @@ function DashboardContent() {
                   )}
 
                   {simuladoFinalizado && notaGeral !== null && (
-                    <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4 shadow-sm" role="status">
-                      <div>
-                        <h2 className="text-xl font-bold text-blue-900 dark:text-blue-200">Simulado finalizado!</h2>
-                        <p className="text-sm text-blue-800 dark:text-blue-300 mt-1">Veja abaixo seus acertos, erros e os comentários da correção.</p>
-                        <div className="mt-4 flex flex-wrap items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={refazerSimulado}
-                            disabled={refazendo || !simuladoId}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all disabled:opacity-60"
-                          >
-                            <RotateCcw size={16} aria-hidden="true" /> {refazendo ? "Preparando..." : "Refazer este simulado"}
-                          </button>
-                          <Link
-                            href="/desempenho"
-                            className="flex items-center gap-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold border border-gray-300 dark:border-gray-600 transition-all"
-                          >
-                            <BarChart2 size={16} aria-hidden="true" /> Ver no histórico
-                          </Link>
+                    <div
+                      role="status"
+                      className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white p-6 sm:p-7 shadow-lg"
+                    >
+                      <div
+                        className="absolute -right-12 -top-16 w-56 h-56 rounded-full bg-white/10"
+                        aria-hidden="true"
+                      />
+                      <div className="relative flex flex-wrap justify-between items-center gap-5">
+                        <div>
+                          <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/85">
+                            <CheckCircle2 size={16} aria-hidden="true" /> Simulado corrigido
+                          </p>
+                          <h2 className="text-2xl font-extrabold mt-1">Simulado finalizado!</h2>
+                          <p className="text-white/85 mt-1">
+                            Veja abaixo seus acertos, erros e os comentários da correção.
+                          </p>
+                          <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={refazerSimulado}
+                              disabled={refazendo || !simuladoId}
+                              className="flex items-center gap-2 bg-white text-blue-800 hover:bg-blue-50 px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors disabled:opacity-60"
+                            >
+                              <RotateCcw size={16} aria-hidden="true" />{" "}
+                              {refazendo ? "Preparando..." : "Refazer este simulado"}
+                            </button>
+                            <Link
+                              href="/desempenho"
+                              className="flex items-center gap-2 bg-white/15 hover:bg-white/25 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                            >
+                              <BarChart2 size={16} aria-hidden="true" /> Ver no histórico
+                            </Link>
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-3xl font-black text-blue-800 dark:text-blue-300">
-                          {notaGeral.toFixed(0)}
-                          <span className="text-lg">/100</span>
-                        </p>
-                        <p className="text-xs text-blue-800 dark:text-blue-300 uppercase tracking-wider font-bold">Nota geral</p>
+                        <div className="rounded-2xl bg-white/15 px-6 py-4 text-center">
+                          <p className="text-4xl font-black">
+                            {notaGeral.toFixed(0)}
+                            <span className="text-lg font-bold">/100</span>
+                          </p>
+                          <p className="text-xs uppercase tracking-wider font-bold text-white/85">
+                            Nota geral
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -979,17 +1149,30 @@ function DashboardContent() {
                       index: numero,
                       modo: (simuladoFinalizado ? "feedback" : "prova") as "feedback" | "prova",
                       respostaSelecionada: respostas[q.id] || null,
-                      onResponder: (resp: string) => setRespostas((atuais) => ({ ...atuais, [q.id]: resp })),
+                      onResponder: (resp: string) =>
+                        setRespostas((atuais) => ({ ...atuais, [q.id]: resp })),
                       feedback,
                     };
                     return (
-                      <div key={q.id} id={`questao-card-${q.id}`} tabIndex={-1} className="scroll-mt-4 rounded-xl">
-                        {q.tipo_questao === "Aberta" ? <RenderizadorDiscursiva {...props} /> : <RenderizadorSimulado {...props} />}
+                      <div
+                        key={q.id}
+                        id={`questao-card-${q.id}`}
+                        tabIndex={-1}
+                        className="scroll-mt-4 rounded-xl"
+                      >
+                        {q.tipo_questao === "Aberta" ? (
+                          <RenderizadorDiscursiva {...props} />
+                        ) : (
+                          <RenderizadorSimulado {...props} />
+                        )}
                       </div>
                     );
                   })}
 
-                  <nav aria-label="Paginação das questões" className="flex flex-wrap justify-between items-center gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                  <nav
+                    aria-label="Paginação das questões"
+                    className="flex flex-wrap justify-between items-center gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700"
+                  >
                     <button
                       type="button"
                       onClick={() => mudarPagina(Math.max(1, paginaAtual - 1))}
@@ -998,7 +1181,10 @@ function DashboardContent() {
                     >
                       Anterior
                     </button>
-                    <span className="text-gray-700 dark:text-gray-300 text-sm font-medium" aria-live="polite">
+                    <span
+                      className="text-gray-700 dark:text-gray-300 text-sm font-medium"
+                      aria-live="polite"
+                    >
                       Página {paginaAtual} de {totalPaginas}
                     </span>
 
@@ -1022,13 +1208,18 @@ function DashboardContent() {
                           {finalizando ? "Corrigindo..." : "Finalizar simulado"}
                         </button>
                         {faltam > 0 && (
-                          <span id={`${ids}-faltam`} className="text-xs text-amber-700 dark:text-amber-300">
+                          <span
+                            id={`${ids}-faltam`}
+                            className="text-xs text-amber-700 dark:text-amber-300"
+                          >
                             Faltam {faltam} {faltam === 1 ? "questão" : "questões"} para responder
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-green-700 dark:text-green-400 font-bold">✓ Concluído</span>
+                      <span className="text-green-700 dark:text-green-400 font-bold">
+                        ✓ Concluído
+                      </span>
                     )}
                   </nav>
                 </section>
@@ -1047,7 +1238,11 @@ function DashboardContent() {
               </div>
             ) : gerando ? (
               <EsperaIA
-                titulo={modoCriacao === "material" ? "Criando questões a partir do seu material" : "Criando seu simulado com IA"}
+                titulo={
+                  modoCriacao === "material"
+                    ? "Criando questões a partir do seu material"
+                    : "Criando seu simulado com IA"
+                }
                 descricao={
                   modoCriacao === "material"
                     ? "A IA está lendo seus arquivos para criar questões fiéis ao conteúdo."
@@ -1057,32 +1252,104 @@ function DashboardContent() {
                 segundosPadrao={modoCriacao === "material" ? 30 : 20}
               />
             ) : (
-              <div className="bg-white dark:bg-gray-800 p-8 sm:p-12 text-center rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 w-full flex flex-col items-center justify-center min-h-[400px]">
-                <div className="p-4 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-4" aria-hidden="true">
-                  {modoCriacao === "material" ? <Paperclip size={32} /> : <BookOpen size={32} />}
-                </div>
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
-                  {modoCriacao === "material" ? "Pronto para estudar seus slides ou anotações?" : "Pronto para começar?"}
-                </h2>
-                <p className="text-sm max-w-md text-gray-600 dark:text-gray-400">
-                  {modoCriacao === "material"
-                    ? "Envie até 5 arquivos de aula (slides, apostilas ou resumos) no painel e clique em “Gerar a partir do material”."
-                    : "Escolha o nível, a matéria e os tópicos no painel e clique em “Gerar simulado”."}
-                </p>
-                {focusMode && (
-                  <button
-                    type="button"
-                    onClick={() => setFocusMode(false)}
-                    className="mt-5 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+              <section
+                aria-labelledby={`${ids}-como-funciona`}
+                className={`relative overflow-hidden rounded-3xl text-white p-7 sm:p-10 min-h-[420px] flex flex-col justify-between gap-8 shadow-lg bg-gradient-to-br ${
+                  modoCriacao === "material"
+                    ? "from-emerald-600 via-emerald-700 to-teal-800"
+                    : "from-blue-600 via-blue-700 to-indigo-800"
+                }`}
+              >
+                <div
+                  className="absolute -right-20 -top-24 w-80 h-80 rounded-full bg-white/10"
+                  aria-hidden="true"
+                />
+                <div className="relative max-w-xl space-y-4">
+                  <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/85">
+                    {modoCriacao === "material" ? (
+                      <Paperclip size={16} aria-hidden="true" />
+                    ) : (
+                      <BookOpen size={16} aria-hidden="true" />
+                    )}
+                    {modoCriacao === "material" ? "Meu material" : "Por matéria"}
+                  </p>
+                  <h2
+                    id={`${ids}-como-funciona`}
+                    className="text-3xl sm:text-4xl font-extrabold leading-tight"
                   >
-                    Mostrar painel de configuração
-                  </button>
-                )}
-              </div>
+                    {modoCriacao === "material"
+                      ? "Transforme sua aula em questões."
+                      : "Seu simulado em três passos."}
+                  </h2>
+                  <ol className="space-y-3 pt-2">
+                    {(modoCriacao === "material"
+                      ? [
+                          {
+                            icone: Paperclip,
+                            texto: "Envie até 5 arquivos (PDF, TXT ou MD) ou cole suas anotações.",
+                          },
+                          {
+                            icone: Sparkles,
+                            texto:
+                              "A IA lê o conteúdo e cria questões fiéis ao que foi dado em aula.",
+                          },
+                          {
+                            icone: CheckCircle2,
+                            texto: "Responda e receba a correção detalhada de cada questão.",
+                          },
+                        ]
+                      : [
+                          {
+                            icone: SlidersHorizontal,
+                            texto: "Escolha o nível, a matéria e os tópicos no painel.",
+                          },
+                          {
+                            icone: Sparkles,
+                            texto: "A IA busca questões no banco e cria as que faltarem.",
+                          },
+                          {
+                            icone: CheckCircle2,
+                            texto: "Responda e receba a correção com explicações.",
+                          },
+                        ]
+                    ).map(({ icone: Icone, texto }, i) => (
+                      <li key={texto} className="flex items-center gap-3 text-white/95">
+                        <span
+                          className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0"
+                          aria-hidden="true"
+                        >
+                          <Icone size={18} />
+                        </span>
+                        <span>
+                          <span className="sr-only">Passo {i + 1}: </span>
+                          {texto}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <div className="relative flex flex-wrap items-center gap-3">
+                  {tempoGeracao && tempoGeracao.amostras > 0 && (
+                    <p className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-sm">
+                      <Clock size={15} aria-hidden="true" /> Tempo médio de geração: ~
+                      {tempoGeracao.segundos} s
+                    </p>
+                  )}
+                  {focusMode && (
+                    <button
+                      type="button"
+                      onClick={() => setFocusMode(false)}
+                      className="px-4 py-2 rounded-lg bg-white text-blue-800 font-semibold hover:bg-blue-50"
+                    >
+                      Mostrar painel de configuração
+                    </button>
+                  )}
+                </div>
+              </section>
             )}
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
 
       <DialogoConfirmacao
         aberto={confirmandoNovo}
@@ -1099,7 +1366,12 @@ function DashboardContent() {
       />
 
       <div style={{ display: "none" }}>
-        <SimuladoParaImprimir ref={printRef} questoes={questoes} alunoNome={user?.displayName || ""} materia={tituloCaderno} />
+        <SimuladoParaImprimir
+          ref={printRef}
+          questoes={questoes}
+          alunoNome={user?.displayName || ""}
+          materia={tituloCaderno}
+        />
       </div>
     </div>
   );
