@@ -18,9 +18,11 @@ import {
   ArrowLeft,
   BarChart2,
   History,
-  Home as HomeIcon,
+  Plus,
   RotateCcw,
   Printer,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -29,6 +31,7 @@ import { useReactToPrint } from "react-to-print";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
 import TextoComTabela from "@/components/TextoComTabela";
 import LoadingScreen from "@/components/LoadingScreen";
+import { useAvisos } from "@/components/Avisos";
 
 // O recharts só é baixado quando o gráfico aparece na tela.
 const GraficoDesempenho = dynamic(() => import("@/components/GraficoDesempenho"), {
@@ -77,6 +80,7 @@ export default function Desempenho() {
   const [carregandoDetalhes, setCarregandoDetalhes] = useState(false);
   const [refazendoId, setRefazendoId] = useState<string | null>(null);
   const router = useRouter();
+  const avisar = useAvisos();
 
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
@@ -93,7 +97,7 @@ export default function Desempenho() {
       });
     } catch (err) {
       console.error("Erro ao carregar detalhes", err);
-      alert(mensagemDeErro(err, "Erro ao carregar os detalhes do simulado."));
+      avisar("erro", mensagemDeErro(err, "Erro ao carregar os detalhes do simulado."));
     } finally {
       setCarregandoDetalhes(false);
     }
@@ -119,7 +123,7 @@ export default function Desempenho() {
       router.push("/dashboard");
     } catch (err) {
       console.error("Erro ao refazer simulado", err);
-      alert(mensagemDeErro(err, "Não foi possível carregar o simulado para refazer."));
+      avisar("erro", mensagemDeErro(err, "Não foi possível carregar o simulado para refazer."));
       setRefazendoId(null);
     }
   };
@@ -147,246 +151,246 @@ export default function Desempenho() {
           setHistorico(res.historico);
         } catch (err) {
           console.error("Erro ao buscar dados", err);
+          avisar("erro", mensagemDeErro(err, "Não foi possível carregar seu desempenho. Tente recarregar a página."));
         }
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [router]);
+  }, [router, avisar]);
 
-  if (loading)
-    return <LoadingScreen text="Carregando estatísticas e desempenho..." />;
+  if (loading) return <LoadingScreen text="Carregando estatísticas e desempenho..." />;
   if (!user) return null;
 
+  const dataFormatada = (data: string) => format(new Date(data), "dd 'de' MMM yyyy, HH:mm", { locale: ptBR });
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-3 sm:p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <header className="flex justify-between items-center mb-8 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <div className="flex items-center gap-4">
-            <Link
-              href="/home"
-              className="text-gray-500 hover:text-blue-600 dark:hover:text-blue-400"
-              title="Início"
-            >
-              <HomeIcon size={24} />
+        <header className="flex flex-wrap justify-between items-center gap-3 mb-6 md:mb-8 bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+          <nav aria-label="Principal" className="flex items-center gap-2 sm:gap-4">
+            <Link href="/home" className="flex items-center gap-2 font-bold text-lg text-blue-700 dark:text-blue-400">
+              <Sparkles size={20} aria-hidden="true" /> Lumen
             </Link>
-            <button
-              onClick={() => router.back()}
-              className="text-gray-500 hover:text-blue-600 dark:hover:text-blue-400"
-              title="Voltar"
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 dark:bg-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
             >
-              <ArrowLeft size={24} />
-            </button>
-            <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              Meu Desempenho
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
+              <Plus size={16} aria-hidden="true" /> Novo simulado
+            </Link>
+          </nav>
+          <div className="flex items-center gap-3">
             <ThemeToggle />
-            <span className="text-sm text-gray-600 dark:text-gray-300">
-              {user.email}
-            </span>
+            <span className="text-sm text-gray-700 dark:text-gray-300 max-w-[12rem] truncate">{user.email}</span>
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Painel Gráfico */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                <BarChart2 className="text-blue-500" /> Domínio por Matéria
-              </h2>
-              <div className="flex bg-gray-100 dark:bg-gray-700 rounded-md p-1">
-                <button
-                  onClick={() => setTipoGrafico("Barra")}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${tipoGrafico === "Barra" ? "bg-white dark:bg-gray-600 shadow-sm font-medium text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}
-                >
-                  Barras
-                </button>
-                <button
-                  onClick={() => setTipoGrafico("Radar")}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${tipoGrafico === "Radar" ? "bg-white dark:bg-gray-600 shadow-sm font-medium text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}
-                >
-                  Radar
-                </button>
-              </div>
-            </div>
+        <main id="conteudo">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-6">Meu desempenho</h1>
 
-            <div className="h-80 w-full">
-              {stats.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-gray-400">
-                  Nenhum dado suficiente. Faça alguns simulados!
-                </div>
-              ) : (
-                <GraficoDesempenho stats={stats} tipo={tipoGrafico} />
-              )}
-            </div>
-          </div>
-
-          {/* Histórico Recente de Simulados */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col h-[500px]">
-            {!simuladoAtivo ? (
-              <>
-                <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2 mb-4 shrink-0">
-                  <History className="text-blue-500" /> Simulados Realizados
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            <section
+              aria-labelledby="titulo-grafico"
+              className="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700"
+            >
+              <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+                <h2 id="titulo-grafico" className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <BarChart2 className="text-blue-600" aria-hidden="true" /> Domínio por matéria
                 </h2>
-
-                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                  {historico.length === 0 ? (
-                    <div className="text-center text-gray-400 py-10">
-                      Você ainda não finalizou nenhum simulado.
-                    </div>
-                  ) : (
-                    historico.map((h, idx) => (
-                      <div
-                        key={idx}
-                        className="p-4 border dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors flex justify-between items-center group"
-                      >
-                        <div
-                          onClick={() => carregarDetalhesSimulado(h.id)}
-                          className="flex-1 cursor-pointer"
-                        >
-                          <h3 className="font-bold text-gray-800 dark:text-gray-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                            {h.nome}
-                          </h3>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {format(
-                              new Date(h.data_realizacao),
-                              "dd MMM yyyy, HH:mm",
-                              { locale: ptBR },
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div
-                            onClick={() => carregarDetalhesSimulado(h.id)}
-                            className="text-right cursor-pointer"
-                          >
-                            <div className="text-xl font-black text-blue-600 dark:text-blue-400">
-                              {Number(h.nota_geral).toFixed(0)}/100
-                            </div>
-                            <div className="text-xs text-gray-500 font-semibold uppercase">
-                              Nota Geral
-                            </div>
-                          </div>
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              await refazerSimulado(h.id);
-                            }}
-                            disabled={refazendoId !== null}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white dark:bg-blue-900/40 dark:hover:bg-blue-600 dark:text-blue-300 dark:hover:text-white rounded-lg border border-blue-200 dark:border-blue-800 transition-all shadow-xs disabled:opacity-50"
-                            title="Refazer este simulado com as mesmas questões"
-                          >
-                            <RotateCcw size={14} />{" "}
-                            {refazendoId === h.id ? "Abrindo..." : "Refazer"}
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col h-full">
-                <div className="flex justify-between items-start mb-4 pb-4 border-b dark:border-gray-700 shrink-0">
-                  <div>
+                <div role="group" aria-label="Tipo de gráfico" className="flex bg-gray-100 dark:bg-gray-700 rounded-md p-1">
+                  {(["Barra", "Radar"] as const).map((t) => (
                     <button
-                      onClick={() => setSimuladoAtivo(null)}
-                      className="text-blue-500 hover:underline mb-2 flex items-center gap-1 text-sm font-medium"
+                      key={t}
+                      type="button"
+                      aria-pressed={tipoGrafico === t}
+                      onClick={() => setTipoGrafico(t)}
+                      className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                        tipoGrafico === t
+                          ? "bg-white dark:bg-gray-600 shadow-sm font-semibold text-blue-700 dark:text-blue-300"
+                          : "text-gray-700 dark:text-gray-300"
+                      }`}
                     >
-                      <ArrowLeft size={16} /> Voltar para lista
+                      {t === "Barra" ? "Barras" : "Radar"}
                     </button>
-                    <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">
-                      {simuladoAtivo.nome}
-                    </h2>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {format(
-                        new Date(simuladoAtivo.data_realizacao),
-                        "dd MMM yyyy, HH:mm",
-                        { locale: ptBR },
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="text-right mr-2">
-                      <div className="text-2xl font-black text-blue-600 dark:text-blue-400">
-                        {Number(simuladoAtivo.nota_geral).toFixed(0)}/100
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => refazerSimulado(simuladoAtivo.id)}
-                      disabled={refazendoId !== null}
-                      className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md transition-colors text-sm h-fit font-medium shadow-xs disabled:opacity-50"
-                      title="Refazer este simulado com as mesmas questões"
-                    >
-                      <RotateCcw size={15} />{" "}
-                      {refazendoId === simuladoAtivo.id ? "Abrindo..." : "Refazer Prova"}
-                    </button>
-                    <button
-                      onClick={() => handlePrint()}
-                      className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md transition-colors text-sm h-fit font-medium shadow-xs"
-                    >
-                      <Printer size={15} /> PDF
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                  {carregandoDetalhes ? (
-                    <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-500">
-                      <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                      <p className="text-sm">Carregando detalhes do simulado...</p>
-                    </div>
-                  ) : (
-                    simuladoAtivo.questoes.map((q, idx) => (
-                      <div
-                        key={idx}
-                        className="p-4 border dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900/50"
-                      >
-                        <div className="flex justify-between mb-2">
-                          <span className="font-semibold text-gray-700 dark:text-gray-300">
-                            Questão {idx + 1}
-                          </span>
-                          <span
-                            className={`font-bold ${q.acertou || Number(q.nota) >= 50 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
-                          >
-                            {q.tipo_questao === "Aberta"
-                              ? `${Number(q.nota).toFixed(1)}/100`
-                              : q.acertou
-                                ? "ACERTOU"
-                                : "ERROU"}
-                          </span>
-                        </div>
-                        <TextoComTabela
-                          texto={q.pergunta}
-                          className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3"
-                        />
-
-                        <div className="text-sm space-y-1">
-                          <div>
-                            <strong className="text-gray-600 dark:text-gray-400">
-                              Sua Resposta:
-                            </strong>{" "}
-                            <span className="text-gray-800 dark:text-gray-200">
-                              {q.resposta_aluno}
-                            </span>
-                          </div>
-                          {q.feedback_ia && (
-                            <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 rounded border border-blue-100 dark:border-blue-800/40">
-                              <strong>Feedback:</strong> {q.feedback_ia}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
+                  ))}
                 </div>
               </div>
-            )}
+
+              <div className="h-80 w-full">
+                {stats.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-center text-gray-600 dark:text-gray-400">
+                    Ainda não há dados. Faça alguns simulados para ver sua evolução!
+                  </div>
+                ) : (
+                  <GraficoDesempenho stats={stats} tipo={tipoGrafico} />
+                )}
+              </div>
+
+              {/* O gráfico é só visual; esta tabela traz os mesmos números para leitores de tela. */}
+              {stats.length > 0 && (
+                <table className="sr-only">
+                  <caption>Média de nota por matéria</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Matéria</th>
+                      <th scope="col">Média (0 a 100)</th>
+                      <th scope="col">Questões respondidas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.map((s) => (
+                      <tr key={s.subject}>
+                        <th scope="row">{s.subject}</th>
+                        <td>{s.A.toFixed(0)}</td>
+                        <td>{s.tentativas}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+
+            <section
+              aria-label="Simulados realizados"
+              className="bg-white dark:bg-gray-800 p-5 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col lg:h-[560px]"
+            >
+              {!simuladoAtivo ? (
+                <>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-4 shrink-0">
+                    <History className="text-blue-600" aria-hidden="true" /> Simulados realizados
+                  </h2>
+
+                  {historico.length === 0 ? (
+                    <div className="text-center text-gray-600 dark:text-gray-400 py-10">
+                      Você ainda não finalizou nenhum simulado.{" "}
+                      <Link href="/dashboard" className="text-blue-700 dark:text-blue-400 font-semibold hover:underline">
+                        Criar o primeiro
+                      </Link>
+                    </div>
+                  ) : (
+                    <ul className="flex-1 overflow-y-auto space-y-3 pr-1">
+                      {historico.map((h) => (
+                        <li
+                          key={h.id}
+                          className="flex items-stretch gap-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900/50"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => carregarDetalhesSimulado(h.id)}
+                            className="flex-1 min-w-0 flex items-center justify-between gap-3 p-4 text-left rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors group"
+                          >
+                            <span className="min-w-0">
+                              <span className="block font-bold text-gray-900 dark:text-gray-100 group-hover:text-blue-700 dark:group-hover:text-blue-400 truncate">
+                                {h.nome}
+                              </span>
+                              <span className="block text-sm text-gray-600 dark:text-gray-400">{dataFormatada(h.data_realizacao)}</span>
+                            </span>
+                            <span className="text-right shrink-0">
+                              <span className="block text-xl font-black text-blue-700 dark:text-blue-400">
+                                {Number(h.nota_geral).toFixed(0)}
+                                <span className="text-sm font-bold">/100</span>
+                              </span>
+                              <span className="sr-only">Ver detalhes</span>
+                            </span>
+                            <ChevronRight size={18} className="text-gray-400 shrink-0" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => refazerSimulado(h.id)}
+                            disabled={refazendoId !== null}
+                            className="my-3 mr-3 flex items-center gap-1.5 px-3 text-sm font-bold bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white dark:bg-blue-900/40 dark:hover:bg-blue-600 dark:text-blue-300 dark:hover:text-white rounded-lg border border-blue-200 dark:border-blue-800 transition-all disabled:opacity-50"
+                            aria-label={`Refazer o simulado ${h.nome}`}
+                          >
+                            <RotateCcw size={14} aria-hidden="true" />
+                            <span aria-hidden="true">{refazendoId === h.id ? "Abrindo..." : "Refazer"}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col h-full min-h-0">
+                  <div className="flex flex-wrap justify-between items-start gap-3 mb-4 pb-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setSimuladoAtivo(null)}
+                        className="text-blue-700 dark:text-blue-400 hover:underline mb-2 flex items-center gap-1 text-sm font-medium"
+                      >
+                        <ArrowLeft size={16} aria-hidden="true" /> Voltar para a lista
+                      </button>
+                      <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 break-words">{simuladoAtivo.nome}</h2>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {dataFormatada(simuladoAtivo.data_realizacao)} · nota{" "}
+                        <strong className="text-blue-700 dark:text-blue-400">{Number(simuladoAtivo.nota_geral).toFixed(0)}/100</strong>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => refazerSimulado(simuladoAtivo.id)}
+                        disabled={refazendoId !== null}
+                        className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-md transition-colors text-sm font-medium disabled:opacity-50"
+                      >
+                        <RotateCcw size={15} aria-hidden="true" /> {refazendoId === simuladoAtivo.id ? "Abrindo..." : "Refazer"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePrint()}
+                        className="flex items-center gap-1.5 bg-green-700 hover:bg-green-800 text-white px-3 py-2 rounded-md transition-colors text-sm font-medium"
+                      >
+                        <Printer size={15} aria-hidden="true" /> PDF
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    className="flex-1 overflow-y-auto space-y-4 pr-1"
+                    aria-busy={carregandoDetalhes}
+                    tabIndex={0}
+                    role="region"
+                    aria-label="Questões do simulado"
+                  >
+                    {carregandoDetalhes ? (
+                      <div role="status" className="flex flex-col items-center justify-center py-12 gap-3 text-gray-600 dark:text-gray-400">
+                        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+                        <p className="text-sm">Carregando detalhes do simulado...</p>
+                      </div>
+                    ) : (
+                      simuladoAtivo.questoes.map((q, idx) => {
+                        const acertou = q.acertou || Number(q.nota) >= 50;
+                        return (
+                          <article key={idx} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900/50">
+                            <div className="flex justify-between gap-3 mb-2">
+                              <h3 className="font-semibold text-gray-800 dark:text-gray-200">Questão {idx + 1}</h3>
+                              <span className={`font-bold text-sm ${acertou ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}>
+                                {q.tipo_questao === "Aberta" ? `Nota ${Number(q.nota).toFixed(0)}/100` : acertou ? "✓ Acertou" : "✗ Errou"}
+                              </span>
+                            </div>
+                            <TextoComTabela texto={q.pergunta} className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3" />
+                            <div className="text-sm space-y-1">
+                              <p>
+                                <strong className="text-gray-700 dark:text-gray-300">Sua resposta:</strong>{" "}
+                                <span className="text-gray-900 dark:text-gray-100 whitespace-pre-wrap">{q.resposta_aluno || "(em branco)"}</span>
+                              </p>
+                              {q.feedback_ia && (
+                                <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-200 rounded border border-blue-200 dark:border-blue-800/40">
+                                  <strong>Comentário:</strong> {q.feedback_ia}
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </section>
           </div>
-        </div>
+        </main>
       </div>
 
       <div style={{ display: "none" }}>
@@ -396,7 +400,6 @@ export default function Desempenho() {
             questoes={simuladoAtivo.questoes}
             alunoNome={user?.displayName || user?.email || "Aluno"}
             materia={simuladoAtivo.nome}
-            // we can pass feedback data to the print component or it will just print the questions.
           />
         )}
       </div>

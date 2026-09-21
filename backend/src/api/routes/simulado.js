@@ -22,6 +22,8 @@ const {
   criarSimulado,
 } = require("../../services/questoes");
 const { corrigirSimulado } = require("../../services/correcao");
+const { mapearComLimite, dividirEmLotes } = require("../../services/concorrencia");
+const { registrarMetrica, temposMedios } = require("../../services/metricas");
 const v = require("../../services/validacao");
 
 const MATERIAS_ESCOLARES = [
@@ -89,6 +91,30 @@ function exigirQuestoes(questoes) {
   return questoes;
 }
 
+// Material pequeno pode ser enviado em cada lote; acima disso a geração vai numa chamada só,
+// para não multiplicar os tokens de entrada (e estourar a cota por minuto do Gemini).
+const LIMITE_BYTES_MATERIAL_EM_LOTES = 3 * 1024 * 1024;
+
+/**
+ * Gera `quantidade` questões em lotes paralelos (config.gemini.questoesPorLote).
+ * Se alguns lotes falharem, segue com os que deram certo; se todos falharem, propaga o erro.
+ */
+async function gerarEmLotes(quantidade, permitirLotes, gerarLote) {
+  const tamanhos = permitirLotes ? dividirEmLotes(quantidade, config.gemini.questoesPorLote) : [quantidade];
+  const resultados = await mapearComLimite(tamanhos, config.gemini.lotesSimultaneos, (tamanho, indice) =>
+    gerarLote(tamanho, { indice, total: tamanhos.length }).then(
+      (dados) => ({ dados }),
+      (erro) => ({ erro }),
+    ),
+  );
+  const certos = resultados.filter((r) => !r.erro);
+  if (certos.length === 0) throw resultados[0].erro;
+  if (certos.length < resultados.length) {
+    console.warn(`[Lumen IA] ${resultados.length - certos.length} de ${resultados.length} lote(s) falharam; seguindo com os demais.`);
+  }
+  return certos.flatMap((r) => (Array.isArray(r.dados) ? r.dados : Array.isArray(r.dados?.questoes) ? r.dados.questoes : []));
+}
+
 // ---------------------------------------------------------------------------
 // Geração a partir do material do aluno (PDF / TXT / MD / anotações)
 // ---------------------------------------------------------------------------
@@ -111,6 +137,8 @@ async function gerarComMaterial(uid, dados, arquivos, comuns) {
 
   try {
     const bytesPdfs = pdfs.reduce((soma, a) => soma + a.size, 0);
+    const bytesTextos = textos.reduce((soma, a) => soma + a.size, 0);
+    const permitirLotes = bytesPdfs + bytesTextos <= LIMITE_BYTES_MATERIAL_EM_LOTES;
     if (bytesPdfs <= config.limites.bytesInlineGemini) {
       for (const pdf of pdfs) {
         partes.push({ inlineData: { data: pdf.buffer.toString("base64"), mimeType: pdf.mimetype } });
@@ -135,17 +163,32 @@ async function gerarComMaterial(uid, dados, arquivos, comuns) {
     if (anotacoes) {
       partes.push({ text: `=== ANOTAÇÕES DO ALUNO ===\n${anotacoes}\n=== FIM DAS ANOTAÇÕES ===` });
     }
-    partes.push({
-      text: prompts.promptMaterial({ quantidade, tipo, dificuldade, nomesArquivos, temAnotacoes: Boolean(anotacoes) }),
-    });
-
     console.log(`[Lumen IA] Gerando simulado com material próprio (${arquivos.length} arquivo(s)).`);
-    const dadosIA = await gerarJSON({
-      systemInstruction: prompts.SISTEMA_GERACAO,
-      contents: [{ role: "user", parts: partes }],
-      schema: prompts.schemaQuestoes(tipo),
-      limites: config.gemini.geracao,
-    });
+    const dadosIA = await gerarEmLotes(quantidade, permitirLotes, (tamanho, parte) =>
+      gerarJSON({
+        systemInstruction: prompts.SISTEMA_GERACAO,
+        contents: [
+          {
+            role: "user",
+            parts: [
+              ...partes,
+              {
+                text: prompts.promptMaterial({
+                  quantidade: tamanho,
+                  tipo,
+                  dificuldade,
+                  nomesArquivos,
+                  temAnotacoes: Boolean(anotacoes),
+                  parte,
+                }),
+              },
+            ],
+          },
+        ],
+        schema: prompts.schemaQuestoes(tipo),
+        perfil: config.gemini.geracao,
+      }),
+    );
 
     const novas = exigirQuestoes(
       normalizarQuestoesIA(dadosIA, {
@@ -212,25 +255,26 @@ async function gerarPorCurriculo(uid, dados, comuns) {
   let novas = [];
   const faltam = quantidade - doBanco.length;
   if (faltam > 0) {
-    const prompt =
-      nivel === "superior"
-        ? prompts.promptSuperior({ quantidade: faltam, tipo, curso, disciplina: materias[0], topicos, dificuldade })
-        : prompts.promptCurriculo({
-            quantidade: faltam,
-            tipo,
-            materias,
-            topicos,
-            anoEscolar,
-            dificuldade,
-            priorizarOficiais,
-          });
-
-    const dadosIA = await gerarJSON({
-      systemInstruction: prompts.SISTEMA_GERACAO,
-      contents: prompt,
-      schema: prompts.schemaQuestoes(tipo, nivel === "superior" ? null : materias),
-      limites: config.gemini.geracao,
-    });
+    const dadosIA = await gerarEmLotes(faltam, true, (tamanho, parte) =>
+      gerarJSON({
+        systemInstruction: prompts.SISTEMA_GERACAO,
+        contents:
+          nivel === "superior"
+            ? prompts.promptSuperior({ quantidade: tamanho, tipo, curso, disciplina: materias[0], topicos, dificuldade, parte })
+            : prompts.promptCurriculo({
+                quantidade: tamanho,
+                tipo,
+                materias,
+                topicos,
+                anoEscolar,
+                dificuldade,
+                priorizarOficiais,
+                parte,
+              }),
+        schema: prompts.schemaQuestoes(tipo, nivel === "superior" ? null : materias),
+        perfil: config.gemini.geracao,
+      }),
+    );
 
     novas = normalizarQuestoesIA(dadosIA, {
       tipoSolicitado: tipo,
@@ -257,15 +301,16 @@ async function gerarPorCurriculo(uid, dados, comuns) {
 
 // POST /api/simulado/gerar
 router.post("/gerar", authMiddleware, limitesGeracao, receberMaterial, async (req, res) => {
+  const inicio = Date.now();
   const uid = req.user.uid;
   const dados = lerDados(req);
   const comuns = lerParametrosComuns(dados);
   const arquivos = req.files || [];
+  const comMaterial = dados.modo === "material" || arquivos.length > 0;
 
-  const { doBanco, novas, nomePadrao } =
-    dados.modo === "material" || arquivos.length > 0
-      ? await gerarComMaterial(uid, dados, arquivos, comuns)
-      : await gerarPorCurriculo(uid, dados, comuns);
+  const { doBanco, novas, nomePadrao } = comMaterial
+    ? await gerarComMaterial(uid, dados, arquivos, comuns)
+    : await gerarPorCurriculo(uid, dados, comuns);
 
   const nome = v.texto(dados.nome, 120) || nomePadrao;
 
@@ -276,6 +321,13 @@ router.post("/gerar", authMiddleware, limitesGeracao, receberMaterial, async (re
     return { simulado: criado, questoes: todas };
   });
 
+  registrarMetrica({
+    operacao: comMaterial ? "geracao_material" : "geracao",
+    duracaoMs: Date.now() - inicio,
+    quantidade: questoes.length,
+    usouIA: novas.length > 0,
+  });
+
   res.status(201).json({
     simulado_id: simulado.id,
     nome: simulado.nome,
@@ -283,8 +335,14 @@ router.post("/gerar", authMiddleware, limitesGeracao, receberMaterial, async (re
   });
 });
 
+// GET /api/simulado/tempos — tempo médio (mediana) das últimas gerações e correções com IA
+router.get("/tempos", authMiddleware, async (req, res) => {
+  res.json(await temposMedios());
+});
+
 // POST /api/simulado/finalizar
 router.post("/finalizar", authMiddleware, limitesCorrecao, async (req, res) => {
+  const inicio = Date.now();
   const uid = req.user.uid;
   const simuladoId = v.exigirUuid(req.body?.simulado_id, "simulado_id");
   const respostas = req.body?.respostas;
@@ -340,6 +398,14 @@ router.post("/finalizar", authMiddleware, limitesCorrecao, async (req, res) => {
          WHERE id = $3`,
         [notaGeral, nomeInformado, simuladoId],
       );
+    });
+
+    const discursivas = questoes.filter((q) => q.tipo_questao === "Aberta").length;
+    registrarMetrica({
+      operacao: "correcao",
+      duracaoMs: Date.now() - inicio,
+      quantidade: discursivas,
+      usouIA: discursivas > 0,
     });
 
     res.json({

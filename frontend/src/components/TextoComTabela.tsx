@@ -8,6 +8,28 @@ interface Props {
 }
 
 /**
+ * A IA às vezes manda a tabela Markdown numa linha só, com as linhas separadas por "||"
+ * (ex.: "Veja: | A | B || 1 | 2 |"). Quebra essas tabelas em uma linha por registro.
+ */
+function separarTabelasEmLinha(texto: string): string[] {
+  return texto.split("\n").flatMap((linha) => {
+    const barras = (linha.match(/\|/g) || []).length;
+    if (!linha.includes("||") || barras < 6) return [linha];
+    const inicio = linha.indexOf("|");
+    const antes = linha.slice(0, inicio).trim();
+    const registros = linha
+      .slice(inicio)
+      .split(/\|\s*\|/)
+      .map((r) => r.replace(/^\|/, "").replace(/\|$/, "").trim())
+      .filter(Boolean)
+      .map((r) => `| ${r} |`);
+    return antes ? [antes, ...registros] : registros;
+  });
+}
+
+const ehSeparador = (linha: string) => /^\|?[\s:|-]+\|?$/.test(linha) && linha.includes("-");
+
+/**
  * Componente que renderiza texto comum com suporte nativo a tabelas em Markdown (| col1 | col2 |)
  * e formatações de negrito (**texto**), com suporte total a Modo Escuro e Impressão.
  */
@@ -25,7 +47,7 @@ export default function TextoComTabela({ texto, className = "" }: Props) {
     });
   };
 
-  const lines = texto.split("\n");
+  const lines = separarTabelasEmLinha(texto);
   const elements: React.ReactNode[] = [];
 
   let currentTextLines: string[] = [];
@@ -50,8 +72,8 @@ export default function TextoComTabela({ texto, className = "" }: Props) {
   const flushTable = (keyPrefix: number) => {
     if (currentTableLines.length >= 2) {
       const headerLine = currentTableLines[0];
-      // A linha 1 costuma ser o separador |---|---|
-      const dataLines = currentTableLines.slice(2);
+      // A linha 1 costuma ser o separador |---|---|, mas nem sempre a IA o inclui.
+      const dataLines = currentTableLines.slice(ehSeparador(currentTableLines[1]) ? 2 : 1);
 
       const parseCells = (line: string) => {
         return line
@@ -74,6 +96,7 @@ export default function TextoComTabela({ texto, className = "" }: Props) {
                 {headers.map((h, i) => (
                   <th
                     key={i}
+                    scope="col"
                     className="px-4 py-3 border-r last:border-r-0 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100"
                   >
                     {formatarNegrito(h)}

@@ -1,120 +1,134 @@
 "use client";
 
 import { useState } from "react";
-import {
-  signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-} from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { LogIn } from "lucide-react";
+import { auth, googleProvider } from "@/lib/firebase";
+import { mensagemErroAuth } from "@/lib/errosAuth";
+import { useAvisos } from "@/components/Avisos";
+import LayoutAutenticacao from "@/components/auth/LayoutAutenticacao";
+import { BotaoGoogle, Campo, CampoSenha, Divisor } from "@/components/auth/CamposAutenticacao";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [isRegistering, setIsRegistering] = useState(false);
   const router = useRouter();
+  const avisar = useAvisos();
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
 
-  const handleGoogleLogin = async () => {
+  const entrar = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    setErro(null);
+    setEnviando(true);
     try {
-      await signInWithPopup(auth, googleProvider);
-      router.push("/home");
-    } catch (err: any) {
-      setError(err.message || "Erro ao fazer login com Google");
+      await signInWithEmailAndPassword(auth, email.trim(), senha);
+      router.replace("/home");
+    } catch (err) {
+      setErro(mensagemErroAuth(err));
+      setEnviando(false);
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const entrarComGoogle = async () => {
+    setErro(null);
+    setEnviando(true);
     try {
-      if (isRegistering) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-      router.push("/home");
-    } catch (err: any) {
-      setError(err.message || "Erro na autenticação");
+      await signInWithPopup(auth, googleProvider);
+      router.replace("/home");
+    } catch (err) {
+      setErro(mensagemErroAuth(err));
+      setEnviando(false);
     }
+  };
+
+  const esqueciSenha = async () => {
+    setErro(null);
+    if (!email.trim()) {
+      setErro("Digite seu e-mail no campo acima para receber o link de redefinição de senha.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch (err) {
+      const codigo = (err as { code?: string })?.code;
+      // Não revela se o e-mail existe: só erros de formato ou rede aparecem para o aluno.
+      if (codigo !== "auth/user-not-found") {
+        setErro(mensagemErroAuth(err));
+        return;
+      }
+    }
+    avisar("sucesso", "Se houver uma conta com esse e-mail, enviamos um link para redefinir a senha.");
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-md">
-        <h1 className="text-3xl font-bold text-center text-blue-600">Lumen</h1>
-        <p className="text-center text-gray-500">
-          Plataforma de Estudos Inteligente
-        </p>
+    <LayoutAutenticacao modo="login">
+      <div className="space-y-6">
+        <div>
+          <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">
+            <LogIn size={16} aria-hidden="true" /> Entrar
+          </p>
+          <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white">Bem-vindo de volta</h1>
+          <p className="mt-1.5 text-gray-600 dark:text-gray-300">Acesse sua conta para continuar estudando.</p>
+        </div>
 
-        {error && (
-          <div className="p-3 text-sm text-red-600 bg-red-100 rounded-md">
-            {error}
+        {erro && (
+          <div
+            role="alert"
+            className="p-3 text-sm rounded-lg bg-red-50 text-red-800 border border-red-200 dark:bg-red-950 dark:text-red-100 dark:border-red-800"
+          >
+            {erro}
           </div>
         )}
 
-        <form onSubmit={handleEmailAuth} className="space-y-4">
+        <BotaoGoogle texto="Entrar com Google" onClick={entrarComGoogle} disabled={enviando} />
+        <Divisor texto="ou entre com seu e-mail" />
+
+        <form onSubmit={entrar} className="space-y-4">
+          <Campo
+            rotulo="E-mail"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="voce@exemplo.com"
+          />
           <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 mt-1 text-black border rounded-md focus:outline-none focus:ring focus:ring-blue-200"
+            <CampoSenha
+              rotulo="Senha"
+              autoComplete="current-password"
               required
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Senha
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 mt-1 text-black border rounded-md focus:outline-none focus:ring focus:ring-blue-200"
-              required
-            />
+            <button
+              type="button"
+              onClick={esqueciSenha}
+              className="mt-2 text-sm font-medium text-blue-700 dark:text-blue-400 hover:underline"
+            >
+              Esqueci minha senha
+            </button>
           </div>
           <button
             type="submit"
-            className="w-full py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+            disabled={enviando}
+            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm disabled:opacity-60 transition-colors"
           >
-            {isRegistering ? "Criar Conta" : "Entrar com Email"}
+            {enviando ? "Entrando..." : "Entrar"}
           </button>
         </form>
 
-        <div className="text-center text-sm">
-          <button
-            type="button"
-            onClick={() => setIsRegistering(!isRegistering)}
-            className="text-blue-600 hover:underline"
-          >
-            {isRegistering
-              ? "Já tem uma conta? Faça login"
-              : "Ainda não tem conta? Crie agora"}
-          </button>
-        </div>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 text-gray-500 bg-white">Ou continue com</span>
-          </div>
-        </div>
-
-        <button
-          onClick={handleGoogleLogin}
-          className="w-full py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 flex items-center justify-center gap-2"
-        >
-          Google
-        </button>
+        <p className="text-center text-sm text-gray-700 dark:text-gray-300">
+          Ainda não tem conta?{" "}
+          <Link href="/cadastro" className="font-semibold text-blue-700 dark:text-blue-400 hover:underline">
+            Criar conta grátis
+          </Link>
+        </p>
       </div>
-    </div>
+    </LayoutAutenticacao>
   );
 }

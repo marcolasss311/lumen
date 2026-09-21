@@ -3,7 +3,7 @@
 // para que instruções escondidas nele (prompt injection) tenham menos peso.
 
 const REGRAS_FORMATO = `- NÃO use LaTeX nem símbolos especiais de fórmula (como $, \\frac, \\log). Escreva fórmulas em texto plano (ex: pH = -log10[H+], x^2, integral de f(x) dx).
-- TABELAS E DADOS: sempre que a questão depender de comparação de dados, propriedades, experimentos, estatísticas, cronologias ou tabelas-verdade, inclua a tabela no texto da pergunta em Markdown padrão (com barras verticais | e separador |--|--|).`;
+- TABELAS E DADOS: sempre que a questão depender de comparação de dados, propriedades, experimentos, estatísticas, cronologias ou tabelas-verdade, inclua a tabela no texto da pergunta em Markdown padrão (com barras verticais | e separador |--|--|), com CADA LINHA DA TABELA EM UMA LINHA PRÓPRIA (separe as linhas com \\n) e uma linha em branco antes da tabela.`;
 
 const SISTEMA_GERACAO = `Você é um professor e elaborador de avaliações experiente, criando questões para estudantes brasileiros.
 Regras obrigatórias:
@@ -93,13 +93,31 @@ function descreverTipo(tipo, quantidade) {
   return `${quantidade} questões mistas: metade de múltipla escolha e metade discursivas. Informe o tipo de cada uma em "tipo_questao" ("Fechada" ou "Aberta")`;
 }
 
+// Quando a geração é dividida em lotes paralelos, cada lote recebe um foco diferente
+// para as questões não se repetirem entre si.
+const FOCOS_CURRICULO = [
+  "conceitos, definições e fundamentos",
+  "aplicação em situações-problema, cálculos ou casos práticos",
+  "interpretação de textos, gráficos, tabelas ou experimentos",
+  "relações entre conteúdos, comparações e análise crítica",
+];
+const FOCOS_MATERIAL = ["início", "trecho intermediário", "trecho final", "conjunto (visão geral)"];
+
+function instrucaoParte(parte, material = false) {
+  if (!parte || parte.total <= 1) return "";
+  const foco = material
+    ? `priorize o ${FOCOS_MATERIAL[parte.indice % FOCOS_MATERIAL.length]} do material`
+    : `priorize ${FOCOS_CURRICULO[parte.indice % FOCOS_CURRICULO.length]}`;
+  return `\nEsta é a parte ${parte.indice + 1} de ${parte.total} do simulado; as outras partes são criadas ao mesmo tempo. Para não repetir questões, ${foco}.`;
+}
+
 function regraOrigem(priorizarOficiais) {
   return priorizarOficiais
     ? `BANCA E ORIGEM: o aluno pediu para priorizar questões oficiais. Transcreva questões REAIS e AUTÊNTICAS de vestibulares e exames conhecidos (ENEM, FUVEST, UNICAMP, UNESP, UERJ, ENADE etc.) e indique em "origem" a banca e o ano reais (ex: "ENEM 2022"). Só se não houver questão oficial sobre o tema, crie uma inédita com "origem": "IA".`
     : `Preencha "origem" com "IA".`;
 }
 
-function promptCurriculo({ quantidade, tipo, materias, topicos, anoEscolar, dificuldade, priorizarOficiais }) {
+function promptCurriculo({ quantidade, tipo, materias, topicos, anoEscolar, dificuldade, priorizarOficiais, parte }) {
   const listaTopicos = topicos.length ? topicos.join(", ") : "conteúdos gerais da matéria";
   const variasMaterias = materias.length > 1;
   return `Gere ${descreverTipo(tipo, quantidade)}.
@@ -110,10 +128,10 @@ Padrão de prova: ENEM e vestibulares brasileiros
 Nível de dificuldade: ${dificuldade}. Adapte a complexidade dos conceitos, textos e distratores a esse nível.
 ${regraOrigem(priorizarOficiais)}
 ${variasMaterias ? 'Distribua as questões entre as matérias e informe em "materia" a matéria de cada uma.' : ""}
-Em "topico", informe o tópico específico cobrado em cada questão.`;
+Em "topico", informe o tópico específico cobrado em cada questão.${instrucaoParte(parte)}`;
 }
 
-function promptSuperior({ quantidade, tipo, curso, disciplina, topicos, dificuldade }) {
+function promptSuperior({ quantidade, tipo, curso, disciplina, topicos, dificuldade, parte }) {
   const listaTopicos = topicos.length ? topicos.join(", ") : "conteúdos centrais da disciplina";
   return `Elabore uma avaliação de Ensino Superior com ${descreverTipo(tipo, quantidade)}.
 Curso: ${curso}
@@ -122,10 +140,10 @@ Tópicos: ${listaTopicos}
 Nível de dificuldade: ${dificuldade}
 Use o rigor técnico, conceitual e metodológico típico de avaliações universitárias (padrão ENADE/concursos).
 Preencha "origem" com "IA".
-Em "topico", informe o tópico específico cobrado em cada questão.`;
+Em "topico", informe o tópico específico cobrado em cada questão.${instrucaoParte(parte)}`;
 }
 
-function promptMaterial({ quantidade, tipo, dificuldade, nomesArquivos, temAnotacoes }) {
+function promptMaterial({ quantidade, tipo, dificuldade, nomesArquivos, temAnotacoes, parte }) {
   const fontes = [
     nomesArquivos.length ? `${nomesArquivos.length} arquivo(s) de aula (${nomesArquivos.join(", ")})` : null,
     temAnotacoes ? "anotações de estudo" : null,
@@ -138,7 +156,7 @@ DIRETRIZES:
 1. FIDELIDADE AO MATERIAL: formule as perguntas ESTRITAMENTE a partir dos conceitos, definições, teorias, autores, comparações, arquiteturas, diagramas, códigos, tabelas e exemplos presentes no material.
 2. Não cobre conteúdo externo que não tenha sido mencionado ou fundamentado no material.
 3. Nível de dificuldade: ${dificuldade}.
-Preencha "origem" com "Material de Aula" e "topico" com o assunto do material cobrado na questão.`;
+Preencha "origem" com "Material de Aula" e "topico" com o assunto do material cobrado na questão.${instrucaoParte(parte, true)}`;
 }
 
 function promptCorrecao({ pergunta, gabarito, resposta }) {

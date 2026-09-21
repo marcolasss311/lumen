@@ -11,6 +11,9 @@ const inteiro = (valor, padrao) => {
   return Number.isFinite(n) && n > 0 ? n : padrao;
 };
 
+const listaModelos = (valor, padrao) =>
+  valor ? valor.split(",").map((m) => m.trim()).filter(Boolean) : padrao;
+
 // Origens autorizadas a chamar a API pelo navegador (separadas por vírgula).
 const ORIGENS_PADRAO = [
   "https://lumenm.web.app",
@@ -54,16 +57,36 @@ module.exports = {
 
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
-    // Do melhor para o mais leve. A família 2.5 não está mais disponível para contas novas (404),
-    // e o gemini-3.7-flash ficou fora por estar lento demais (respostas de ~2 min em set/2026).
-    modelos: process.env.GEMINI_MODELOS
-      ? process.env.GEMINI_MODELOS.split(",").map((m) => m.trim()).filter(Boolean)
-      : ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
-    // Limite por modelo e para a cadeia inteira. Sob sobrecarga, alguns modelos "penduram"
-    // em vez de responder 503; o limite por modelo garante tempo para tentar os reservas.
-    geracao: { timeoutPorModeloMs: 70_000, prazoTotalMs: 210_000 },
-    correcao: { timeoutPorModeloMs: 40_000, prazoTotalMs: 100_000 },
-    correcoesSimultaneas: 5,
+    // Perfis de uso. Os modelos "lite" vêm primeiro: em set/2026 respondiam em ~10 s e quase
+    // nunca ficavam indisponíveis no nível gratuito, enquanto os "flash" viviam sobrecarregados
+    // (e demoravam 30-40 s só para responder "indisponível"). A família 2.5 não existe mais para
+    // contas novas (404). Ver core/gemini.js para as tentativas escalonadas.
+    geracao: {
+      modelos: listaModelos(process.env.GEMINI_MODELOS_GERACAO, [
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.8-flash",
+        "gemini-3.6-flash",
+      ]),
+      esperaReservaMs: 15_000,
+      timeoutPorModeloMs: 60_000,
+      prazoTotalMs: 150_000,
+    },
+    correcao: {
+      modelos: listaModelos(process.env.GEMINI_MODELOS_CORRECAO, [
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.8-flash",
+      ]),
+      esperaReservaMs: 6_000,
+      timeoutPorModeloMs: 30_000,
+      prazoTotalMs: 90_000,
+    },
+    // A IA gera 5 questões em ~10 s; 20 numa resposta só levariam ~4x mais. Em lotes paralelos
+    // o tempo total fica perto do de um lote.
+    questoesPorLote: 5,
+    lotesSimultaneos: 4,
+    correcoesSimultaneas: 10,
   },
 
   // Nota mínima (0-100) para considerar uma questão discursiva como "acerto".

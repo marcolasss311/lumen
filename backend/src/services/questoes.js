@@ -54,11 +54,15 @@ function normalizarQuestoesIA(dadosIA, opcoes) {
 
   const lista = Array.isArray(dadosIA) ? dadosIA : Array.isArray(dadosIA?.questoes) ? dadosIA.questoes : [];
   const questoes = [];
+  // Lotes gerados em paralelo às vezes trazem a mesma questão: compara o começo do enunciado.
+  const vistas = new Set();
+  const chaveDe = (texto) => texto.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().slice(0, 120);
 
   for (const q of lista) {
     if (questoes.length >= quantidade) break;
     const pergunta = cortar(q?.pergunta, LIMITE_PERGUNTA);
-    if (!pergunta) continue;
+    const chave = chaveDe(pergunta);
+    if (!pergunta || vistas.has(chave)) continue;
 
     let tipo = tipoSolicitado;
     if (tipo === "Mesclada") {
@@ -78,6 +82,7 @@ function normalizarQuestoesIA(dadosIA, opcoes) {
     const materiaIA = cortar(q.materia, 255);
     const materia = materiasPermitidas.includes(materiaIA) ? materiaIA : materiaPadrao;
 
+    vistas.add(chave);
     questoes.push({
       materia: materia.slice(0, 255),
       topico: (cortar(q.topico, 255) || topicoPadrao).slice(0, 255),

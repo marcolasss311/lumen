@@ -45,9 +45,9 @@ function extrairJSON(texto) {
   return JSON.parse(limpo);
 }
 
-// Modelos que falharam há pouco ficam de fora por um tempo, para não gastar uma chamada
-// (e segundos do aluno) em cada requisição: modelo removido (404) por 1h; sobrecarga,
-// cota ou lentidão por 1 min.
+// Modelos que falharam ou ficaram lentos há pouco saem da frente por um tempo, para não gastar
+// uma chamada (e segundos do aluno) em cada requisição: modelo removido (404) por 1h;
+// sobrecarga, cota ou lentidão por 1 min.
 const indisponivelAte = new Map();
 
 function marcarIndisponivel(model, error) {
@@ -55,74 +55,125 @@ function marcarIndisponivel(model, error) {
   if (duracao) indisponivelAte.set(model, Date.now() + duracao);
 }
 
-function modelosDisponiveis() {
+function modelosDisponiveis(modelos) {
   const agora = Date.now();
-  const livres = config.gemini.modelos.filter((m) => !(indisponivelAte.get(m) > agora));
+  const livres = modelos.filter((m) => !(indisponivelAte.get(m) > agora));
   // Se todos estiverem marcados, tenta a cadeia inteira mesmo assim.
-  return livres.length ? livres : config.gemini.modelos;
+  return livres.length ? livres : modelos;
+}
+
+/** Uma tentativa em um modelo, com a rede de segurança para configuração recusada. */
+async function tentarModelo({ model, contents, systemInstruction, schema, sinal, timeoutMs }) {
+  let completa = Boolean(schema);
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    const inicio = Date.now();
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+          ...(completa ? { responseSchema: schema } : {}),
+          // Os modelos "flash" gastam milhares de tokens raciocinando antes de responder;
+          // para gerar e corrigir questões o raciocínio curto basta e economiza muitos segundos.
+          ...(completa && !model.includes("lite") ? { thinkingConfig: { thinkingLevel: "LOW" } } : {}),
+          abortSignal: AbortSignal.any([sinal, AbortSignal.timeout(timeoutMs)]),
+        },
+      });
+      const dados = extrairJSON(response.text);
+      console.log(`[Lumen IA] ${model} respondeu em ${Date.now() - inicio}ms.`);
+      return dados;
+    } catch (error) {
+      if (sinal.aborted) throw error; // outra tentativa já respondeu
+      console.warn(`[Lumen IA] Falha no modelo ${model} após ${Date.now() - inicio}ms:`, error?.message || error);
+      // Rede de segurança: se a API recusar o schema ou o nível de raciocínio, repete sem eles.
+      // O formato também está no systemInstruction e a resposta é validada em services/questoes.js.
+      if (tentativa === 1 && completa && ehRequisicaoRecusada(error)) {
+        console.warn(`[Lumen IA] ${model} recusou a configuração; repetindo sem schema.`);
+        completa = false;
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 /**
- * Gera conteúdo em JSON com a cadeia de modelos reserva.
- * - Cada modelo é tentado uma vez: um modelo sobrecarregado costuma continuar assim,
- *   então é mais rápido passar para o próximo do que esperar e repetir.
- * - `schema` força a estrutura da resposta (responseSchema do Gemini).
- * - `limites.timeoutPorModeloMs` limita cada tentativa e `limites.prazoTotalMs` a cadeia inteira,
- *   para a requisição do aluno não ficar pendurada enquanto os modelos reserva são tentados.
+ * Gera conteúdo em JSON usando a cadeia de modelos do `perfil` (config.gemini.geracao/correcao).
+ *
+ * Tentativas escalonadas: começa pelo primeiro modelo; se ele falhar, o próximo começa na hora;
+ * se ele só demorar mais que `esperaReservaMs`, o próximo começa EM PARALELO e vale a primeira
+ * resposta válida (as demais são canceladas). Sob sobrecarga, o Gemini gratuito às vezes leva
+ * 30-40 s só para responder "indisponível": assim o aluno nunca espera por isso.
  */
-async function gerarJSON({ contents, systemInstruction, schema, limites }) {
-  const { timeoutPorModeloMs, prazoTotalMs } = limites;
-  const prazoFinal = Date.now() + prazoTotalMs;
-  let ultimoErro = null;
-  let usarSchema = Boolean(schema);
+function gerarJSON({ contents, systemInstruction, schema, perfil }) {
+  const { modelos, timeoutPorModeloMs, prazoTotalMs, esperaReservaMs } = perfil;
+  const fila = modelosDisponiveis(modelos);
+  const geral = new AbortController();
+  const emAndamento = new Map(); // modelo -> início da tentativa
 
-  for (const model of modelosDisponiveis()) {
-    // A 2ª tentativa no mesmo modelo só acontece sem o schema (ver rede de segurança abaixo).
-    for (let tentativa = 1; tentativa <= 2; tentativa++) {
-      const restante = prazoFinal - Date.now();
-      if (restante < 5_000) {
-        throw new ErroIA("A IA demorou demais para responder.", { status: 503, cause: ultimoErro });
+  return new Promise((resolve, reject) => {
+    let proximo = 0;
+    let encerrado = false;
+    let ultimoErro = null;
+    let timerReserva = null;
+
+    const encerrar = (erro, dados) => {
+      if (encerrado) return;
+      encerrado = true;
+      clearTimeout(timerPrazo);
+      clearTimeout(timerReserva);
+      // Quem ainda estava rodando há mais que a espera de reserva está lento: sai da frente.
+      for (const [model, inicio] of emAndamento) {
+        if (Date.now() - inicio >= esperaReservaMs) indisponivelAte.set(model, Date.now() + 60_000);
       }
+      geral.abort();
+      if (erro) reject(erro);
+      else resolve(dados);
+    };
 
-      try {
-        const inicio = Date.now();
-        const response = await ai.models.generateContent({
-          model,
-          contents,
-          config: {
-            systemInstruction,
-            responseMimeType: "application/json",
-            ...(usarSchema ? { responseSchema: schema } : {}),
-            abortSignal: AbortSignal.timeout(Math.min(timeoutPorModeloMs, restante)),
-          },
-        });
-        const dados = extrairJSON(response.text);
-        console.log(`[Lumen IA] ${model} respondeu em ${Date.now() - inicio}ms.`);
-        return dados;
-      } catch (error) {
-        ultimoErro = error;
-        console.warn(
-          `[Lumen IA] Falha no modelo ${model} (tentativa ${tentativa}):`,
-          error?.message || error,
-        );
-        // Rede de segurança: se a API recusar o schema, repete sem ele. O formato também
-        // está descrito no systemInstruction e a resposta é validada em services/questoes.js.
-        if (tentativa === 1 && usarSchema && ehRequisicaoRecusada(error)) {
-          console.warn("[Lumen IA] Requisição recusada com responseSchema; repetindo sem schema.");
-          usarSchema = false;
-          continue;
+    const timerPrazo = setTimeout(
+      () => encerrar(new ErroIA("A IA demorou demais para responder.", { status: 503, cause: ultimoErro })),
+      prazoTotalMs,
+    );
+
+    const iniciarProximo = () => {
+      clearTimeout(timerReserva);
+      if (encerrado) return;
+      if (proximo >= fila.length) {
+        if (emAndamento.size === 0) {
+          const temporario = ehTimeout(ultimoErro) || ehErroTemporario(ultimoErro);
+          encerrar(
+            new ErroIA(
+              temporario ? "Serviço de IA com alta demanda." : "A IA não conseguiu processar a solicitação.",
+              { status: temporario ? 503 : 502, cause: ultimoErro },
+            ),
+          );
         }
-        marcarIndisponivel(model, error);
-        break;
+        return;
       }
-    }
-  }
 
-  const temporario = ehTimeout(ultimoErro) || ehErroTemporario(ultimoErro);
-  throw new ErroIA(
-    temporario ? "Serviço de IA com alta demanda." : "A IA não conseguiu processar a solicitação.",
-    { status: temporario ? 503 : 502, cause: ultimoErro },
-  );
+      const model = fila[proximo++];
+      emAndamento.set(model, Date.now());
+      timerReserva = setTimeout(iniciarProximo, esperaReservaMs);
+
+      tentarModelo({ model, contents, systemInstruction, schema, sinal: geral.signal, timeoutMs: timeoutPorModeloMs })
+        .then((dados) => {
+          emAndamento.delete(model);
+          encerrar(null, dados);
+        })
+        .catch((error) => {
+          emAndamento.delete(model);
+          if (encerrado) return;
+          ultimoErro = error;
+          marcarIndisponivel(model, error);
+          iniciarProximo(); // falhou: não espera a reserva, chama o próximo já
+        });
+    };
+
+    iniciarProximo();
+  });
 }
 
 /**

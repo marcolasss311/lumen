@@ -2,20 +2,7 @@ const config = require("../config");
 const { gerarJSON } = require("../core/gemini");
 const { SISTEMA_CORRECAO, SCHEMA_CORRECAO, promptCorrecao } = require("./prompts");
 const { lerAlternativas } = require("./questoes");
-
-/** Executa `fn` sobre os itens com no máximo `limite` promessas ao mesmo tempo. */
-async function mapearComLimite(itens, limite, fn) {
-  const resultados = new Array(itens.length);
-  let proximo = 0;
-  const trabalhadores = Array.from({ length: Math.min(limite, itens.length) }, async () => {
-    while (proximo < itens.length) {
-      const i = proximo++;
-      resultados[i] = await fn(itens[i], i);
-    }
-  });
-  await Promise.all(trabalhadores);
-  return resultados;
-}
+const { mapearComLimite } = require("./concorrencia");
 
 async function corrigirDiscursiva({ pergunta, gabarito, resposta }) {
   const respostaLimpa = String(resposta || "").trim().slice(0, config.limites.caracteresRespostaAberta);
@@ -27,7 +14,7 @@ async function corrigirDiscursiva({ pergunta, gabarito, resposta }) {
     systemInstruction: SISTEMA_CORRECAO,
     contents: promptCorrecao({ pergunta, gabarito, resposta: respostaLimpa }),
     schema: SCHEMA_CORRECAO,
-    limites: config.gemini.correcao,
+    perfil: config.gemini.correcao,
   });
 
   const nota = Number(dados?.nota);

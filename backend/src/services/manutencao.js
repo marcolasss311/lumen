@@ -24,6 +24,7 @@ async function executarManutencao() {
          AND NOT EXISTS (SELECT 1 FROM simulados_realizados s WHERE q.id = ANY (s.questao_ids))`,
     );
     await db.query(`DELETE FROM limites_uso WHERE expira_em < now()`);
+    await db.query(`DELETE FROM metricas_ia WHERE criado_em < now() - interval '30 days'`);
     const total = destravados.rowCount + abandonados.rowCount + orfas.rowCount;
     if (total > 0) {
       console.log(

@@ -219,6 +219,24 @@ const MIGRACOES = [
         )`);
     },
   },
+  {
+    // Duração real das gerações e correções, para mostrar o tempo médio ao aluno.
+    id: "008_metricas_ia",
+    up: async (db) => {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS metricas_ia (
+          id BIGSERIAL PRIMARY KEY,
+          operacao VARCHAR(30) NOT NULL,
+          duracao_ms INTEGER NOT NULL,
+          quantidade INTEGER NOT NULL DEFAULT 0,
+          usou_ia BOOLEAN NOT NULL DEFAULT true,
+          criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )`);
+      await db.query(
+        `CREATE INDEX IF NOT EXISTS idx_metricas_ia_operacao_data ON metricas_ia (operacao, criado_em DESC)`,
+      );
+    },
+  },
 ];
 
 // Número arbitrário e fixo usado como trava para duas instâncias não migrarem ao mesmo tempo.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useId, useRef, useState, Suspense } from "react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,7 +15,11 @@ import {
   type SimuladoGerado,
   type SimuladoSalvo,
 } from "@/lib/tipos";
+import { useTemposMedios } from "@/lib/useTemposMedios";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useAvisos } from "@/components/Avisos";
+import EsperaIA from "@/components/EsperaIA";
+import DialogoConfirmacao from "@/components/DialogoConfirmacao";
 import {
   Eye,
   EyeOff,
@@ -33,7 +37,7 @@ import {
   BookOpen,
   Paperclip,
   Trash2,
-  CheckCircle2,
+  LogOut,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
 import { SimuladoParaImprimir } from "@/components/SimuladoParaImprimir";
@@ -48,22 +52,102 @@ const MAX_BYTES_TOTAL = 20 * MB;
 const EXTENSOES_ACEITAS = [".pdf", ".txt", ".md"];
 // Geração com material grande e correção de várias discursivas podem levar alguns minutos.
 const TIMEOUT_IA_MS = 4 * 60 * 1000;
+const ITENS_POR_PAGINA = 3;
+
+const MATERIAS = [
+  "Matemática",
+  "Português",
+  "História",
+  "Geografia",
+  "Física",
+  "Química",
+  "Biologia",
+  "Filosofia",
+  "Sociologia",
+  "Inglês",
+  "Espanhol",
+];
+const ANOS_FUNDAMENTAL = ["1º Ano", "2º Ano", "3º Ano", "4º Ano", "5º Ano", "6º Ano", "7º Ano", "8º Ano", "9º Ano"];
+const ANOS_MEDIO = ["1º Ano EM", "2º Ano EM", "3º Ano EM", "Pré-Vestibular/ENEM"];
+
+type Nivel = "fundamental" | "medio" | "superior";
+const NIVEIS: { id: Nivel; rotulo: string }[] = [
+  { id: "fundamental", rotulo: "Fundamental" },
+  { id: "medio", rotulo: "Médio" },
+  { id: "superior", rotulo: "Superior" },
+];
+const ANO_PADRAO: Record<Nivel, string> = {
+  fundamental: "6º Ano",
+  medio: "Pré-Vestibular/ENEM",
+  superior: "Ensino Superior",
+};
+
+const ESTILO_CAMPO =
+  "w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500";
+const ESTILO_ROTULO = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
+
+/** Estado salvo no navegador. Simulados em andamento de versões antigas (sem id no servidor) são descartados. */
+function lerSimuladoSalvo(): Partial<SimuladoSalvo> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const salvo = localStorage.getItem(CHAVE_SIMULADO_SALVO);
+    if (!salvo) return null;
+    const dados: Partial<SimuladoSalvo> = JSON.parse(salvo);
+    if (!dados.simuladoId && !dados.simuladoFinalizado) {
+      localStorage.removeItem(CHAVE_SIMULADO_SALVO);
+      return null;
+    }
+    return dados.questoes && dados.questoes.length > 0 ? dados : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Botão de alternância (ex.: nível, modo) com estado anunciado por leitores de tela. */
+function BotaoOpcao({
+  ativo,
+  onClick,
+  children,
+  corAtiva = "bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 shadow-sm",
+}: {
+  ativo: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  corAtiva?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={ativo}
+      onClick={onClick}
+      className={`flex items-center justify-center gap-1.5 py-2 px-1.5 text-[13px] font-semibold rounded-lg transition-all whitespace-nowrap ${
+        ativo ? corAtiva : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
 function DashboardContent() {
   const [user, setUser] = useState<User | null>(() => auth.currentUser);
   const [loading, setLoading] = useState(() => !auth.currentUser);
   const router = useRouter();
+  const avisar = useAvisos();
   const searchParams = useSearchParams();
-  const paramNivel = searchParams.get("nivel");
+  const ids = useId();
 
-  const [nivelSegmento, setNivelSegmento] = useState<
-    "fundamental" | "medio" | "superior"
-  >("medio");
+  // O nível vem do link da página inicial (?nivel=...).
+  const nivelInicial = ((): Nivel => {
+    const p = searchParams.get("nivel");
+    return p === "fundamental" || p === "medio" || p === "superior" ? p : "medio";
+  })();
+
+  const [nivelSegmento, setNivelSegmento] = useState<Nivel>(nivelInicial);
   const [curso, setCurso] = useState("");
   const [disciplina, setDisciplina] = useState("");
-
-  const [anoEscolar, setAnoEscolar] = useState("Pré-Vestibular/ENEM");
-  const [modoMateria, setModoMateria] = useState("Única");
+  const [anoEscolar, setAnoEscolar] = useState(ANO_PADRAO[nivelInicial]);
+  const [modoMateria, setModoMateria] = useState<"Única" | "Múltiplas">("Única");
   const [materiaUnica, setMateriaUnica] = useState("Matemática");
   const [materiasMultiplas, setMateriasMultiplas] = useState<string[]>([]);
   const [topicos, setTopicos] = useState<string[]>([]);
@@ -73,101 +157,37 @@ function DashboardContent() {
   const [priorizarOficiais, setPriorizarOficiais] = useState(true);
   const [dificuldade, setDificuldade] = useState("Intermediário (Padrão)");
 
-  // Estados do Simulado
-  const [simuladoId, setSimuladoId] = useState<string | null>(null);
-  const [questoes, setQuestoes] = useState<Questao[]>([]);
+  // Simulado em andamento (restaurado do navegador, se houver)
+  const [salvo] = useState(lerSimuladoSalvo);
+  const [simuladoId, setSimuladoId] = useState<string | null>(salvo?.simuladoId ?? null);
+  const [questoes, setQuestoes] = useState<Questao[]>(salvo?.questoes ?? []);
+  const [respostas, setRespostas] = useState<{ [id: string]: string }>(salvo?.respostas ?? {});
+  const [resultados, setResultados] = useState<ResultadoQuestao[] | null>(salvo?.resultados ?? null);
+  const [paginaAtual, setPaginaAtual] = useState(salvo?.paginaAtual ?? 1);
+  const [simuladoFinalizado, setSimuladoFinalizado] = useState(salvo?.simuladoFinalizado ?? false);
+  const [notaGeral, setNotaGeral] = useState<number | null>(salvo?.notaGeral ?? null);
+  const [nomeSimuladoCustom, setNomeSimuladoCustom] = useState<string | null>(salvo?.nomeSimuladoCustom ?? null);
   const [gerando, setGerando] = useState(false);
-  const [refazendo, setRefazendo] = useState(false);
-  const [respostas, setRespostas] = useState<{ [id: string]: string }>({});
-  const [resultados, setResultados] = useState<ResultadoQuestao[] | null>(null);
-  const [paginaAtual, setPaginaAtual] = useState(1);
-  const [simuladoFinalizado, setSimuladoFinalizado] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
-  const [notaGeral, setNotaGeral] = useState<number | null>(null);
-  const [nomeSimuladoCustom, setNomeSimuladoCustom] = useState<string | null>(
-    null,
-  );
+  const [refazendo, setRefazendo] = useState(false);
+  const [confirmandoNovo, setConfirmandoNovo] = useState(false);
 
   const [showEmail, setShowEmail] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
 
-  // Estados do Modo de Criação com Material Próprio (PDF / Slides)
+  // Criação a partir de material próprio (PDF / anotações)
   const [modoCriacao, setModoCriacao] = useState<"curriculo" | "material">("curriculo");
-  const [arquivosMaterial, setArquivosMaterial] = useState<{
-    arquivo: File;
-    nome: string;
-    tamanho: number;
-  }[]>([]);
+  const [arquivosMaterial, setArquivosMaterial] = useState<{ arquivo: File; nome: string; tamanho: number }[]>([]);
   const [textoMaterial, setTextoMaterial] = useState("");
   const [exibirAnotacoes, setExibirAnotacoes] = useState(false);
   const [nomeMateriaMaterial, setNomeMateriaMaterial] = useState("");
-  const [etapaGeracao, setEtapaGeracao] = useState(0);
+  const [arrastando, setArrastando] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-    if (gerando) {
-      setEtapaGeracao(0);
-      interval = setInterval(() => {
-        setEtapaGeracao((prev) => (prev < 2 ? prev + 1 : prev));
-      }, 2500);
-    } else {
-      setEtapaGeracao(0);
-    }
-    return () => clearInterval(interval);
-  }, [gerando]);
-
-  // Os arquivos são enviados como estão (multipart), sem conversão para base64 no navegador.
-  const handleSelecionarArquivos = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const novosArquivos = [...arquivosMaterial];
-    let tamanhoTotal = novosArquivos.reduce((acc, curr) => acc + curr.tamanho, 0);
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-
-      if (novosArquivos.length >= MAX_ARQUIVOS) {
-        alert(`Você pode adicionar no máximo ${MAX_ARQUIVOS} arquivos por simulado.`);
-        break;
-      }
-
-      const extensao = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
-      if (!EXTENSOES_ACEITAS.includes(extensao)) {
-        alert(`O arquivo "${file.name}" não é suportado. Envie PDF, TXT ou MD.`);
-        continue;
-      }
-
-      if (file.size > MAX_BYTES_ARQUIVO) {
-        alert(`O arquivo "${file.name}" ultrapassa o limite individual de ${MAX_BYTES_ARQUIVO / MB}MB.`);
-        continue;
-      }
-
-      if (tamanhoTotal + file.size > MAX_BYTES_TOTAL) {
-        alert(`O tamanho total dos arquivos combinados ultrapassa ${MAX_BYTES_TOTAL / MB}MB.`);
-        break;
-      }
-
-      tamanhoTotal += file.size;
-      novosArquivos.push({ arquivo: file, nome: file.name, tamanho: file.size });
-    }
-
-    setArquivosMaterial(novosArquivos);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const removerArquivo = (index: number) => {
-    setArquivosMaterial((prev) => prev.filter((_, i) => i !== index));
-  };
-
   const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-  });
+  const handlePrint = useReactToPrint({ contentRef: printRef });
+
+  const tempos = useTemposMedios(Boolean(user));
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -181,56 +201,7 @@ function DashboardContent() {
     return () => unsubscribe();
   }, [router]);
 
-  // Sincronizar nível com base no parâmetro da URL
-  useEffect(() => {
-    if (
-      paramNivel === "fundamental" ||
-      paramNivel === "medio" ||
-      paramNivel === "superior"
-    ) {
-      setNivelSegmento(paramNivel);
-      if (paramNivel === "fundamental") {
-        setAnoEscolar("6º Ano");
-      } else if (paramNivel === "superior") {
-        setAnoEscolar("Ensino Superior");
-      } else {
-        setAnoEscolar("Pré-Vestibular/ENEM");
-      }
-    }
-  }, [paramNivel]);
-
-  // Carregar simulado salvo no localStorage
-  useEffect(() => {
-    let saved: string | null = null;
-    try {
-      saved = localStorage.getItem(CHAVE_SIMULADO_SALVO);
-    } catch {
-      // Armazenamento bloqueado (modo privado): segue sem restaurar.
-    }
-    if (saved) {
-      try {
-        const parsed: Partial<SimuladoSalvo> = JSON.parse(saved);
-        // Simulados em andamento de versões antigas (sem id no servidor) não podem ser finalizados.
-        if (!parsed.simuladoId && !parsed.simuladoFinalizado) {
-          localStorage.removeItem(CHAVE_SIMULADO_SALVO);
-        } else if (parsed.questoes && parsed.questoes.length > 0) {
-          setSimuladoId(parsed.simuladoId || null);
-          setQuestoes(parsed.questoes);
-          setRespostas(parsed.respostas || {});
-          setResultados(parsed.resultados || null);
-          setPaginaAtual(parsed.paginaAtual || 1);
-          setSimuladoFinalizado(parsed.simuladoFinalizado || false);
-          setNotaGeral(parsed.notaGeral || null);
-          if (parsed.nomeSimuladoCustom)
-            setNomeSimuladoCustom(parsed.nomeSimuladoCustom);
-        }
-      } catch (e) {
-        console.error("Erro ao carregar simulado salvo", e);
-      }
-    }
-  }, []);
-
-  // Salvar estado atual do simulado sempre que mudar
+  // Salva o simulado no navegador a cada mudança (sobrevive a recarregar a página).
   useEffect(() => {
     try {
       if (questoes.length > 0) {
@@ -251,43 +222,70 @@ function DashboardContent() {
     } catch {
       // Sem espaço ou armazenamento bloqueado: o simulado continua funcionando, só não persiste.
     }
-  }, [
-    simuladoId,
-    questoes,
-    respostas,
-    resultados,
-    paginaAtual,
-    simuladoFinalizado,
-    notaGeral,
-    nomeSimuladoCustom,
-  ]);
+  }, [simuladoId, questoes, respostas, resultados, paginaAtual, simuladoFinalizado, notaGeral, nomeSimuladoCustom]);
 
-  const gerarSimulado = async () => {
-    if (!user) return;
+  const escolherNivel = (nivel: Nivel) => {
+    setNivelSegmento(nivel);
+    setAnoEscolar(ANO_PADRAO[nivel]);
+  };
 
-    // Validações
+  // Os arquivos são enviados como estão (multipart), sem conversão para base64 no navegador.
+  const adicionarArquivos = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const novosArquivos = [...arquivosMaterial];
+    let tamanhoTotal = novosArquivos.reduce((acc, curr) => acc + curr.tamanho, 0);
+
+    for (const file of Array.from(files)) {
+      if (novosArquivos.length >= MAX_ARQUIVOS) {
+        avisar("erro", `Você pode adicionar no máximo ${MAX_ARQUIVOS} arquivos por simulado.`);
+        break;
+      }
+      const extensao = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+      if (!EXTENSOES_ACEITAS.includes(extensao)) {
+        avisar("erro", `O arquivo "${file.name}" não é suportado. Envie PDF, TXT ou MD.`);
+        continue;
+      }
+      if (file.size > MAX_BYTES_ARQUIVO) {
+        avisar("erro", `O arquivo "${file.name}" passa do limite de ${MAX_BYTES_ARQUIVO / MB} MB.`);
+        continue;
+      }
+      if (tamanhoTotal + file.size > MAX_BYTES_TOTAL) {
+        avisar("erro", `Os arquivos juntos passam do limite de ${MAX_BYTES_TOTAL / MB} MB.`);
+        break;
+      }
+      tamanhoTotal += file.size;
+      novosArquivos.push({ arquivo: file, nome: file.name, tamanho: file.size });
+    }
+
+    setArquivosMaterial(novosArquivos);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const adicionarTopico = () => {
+    const t = novoTopico.trim();
+    if (t && !topicos.includes(t)) setTopicos([...topicos, t]);
+    setNovoTopico("");
+  };
+
+  const gerarSimulado = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
+    if (!user || gerando) return;
+
     if (modoCriacao === "material") {
       if (arquivosMaterial.length === 0 && !textoMaterial.trim()) {
-        return alert(
-          "Por favor, selecione ao menos um arquivo PDF/slide ou digite anotações de estudo!",
-        );
+        return avisar("erro", "Envie ao menos um arquivo (PDF, TXT ou MD) ou escreva suas anotações de estudo.");
       }
     } else if (nivelSegmento === "superior") {
-      if (!curso.trim()) {
-        return alert("Por favor, digite o seu curso de graduação!");
-      }
-      if (!disciplina.trim()) {
-        return alert("Por favor, digite a disciplina ou matéria da faculdade!");
-      }
-      if (topicos.length === 0) {
-        return alert("Adicione ao menos um tópico ou conteúdo da matéria!");
-      }
+      if (!curso.trim()) return avisar("erro", "Digite o seu curso de graduação.");
+      if (!disciplina.trim()) return avisar("erro", "Digite a disciplina da faculdade.");
+      if (topicos.length === 0) return avisar("erro", "Adicione ao menos um tópico ou conteúdo da disciplina.");
     } else {
       if (modoMateria === "Múltiplas" && materiasMultiplas.length === 0) {
-        return alert("Selecione ao menos uma matéria!");
+        return avisar("erro", "Selecione ao menos uma matéria.");
       }
       if (topicos.length === 0 && modoMateria === "Única") {
-        return alert("Adicione ao menos um tópico!");
+        return avisar("erro", "Adicione ao menos um tópico (ex.: Frações).");
       }
     }
 
@@ -311,9 +309,9 @@ function DashboardContent() {
             modo: "material",
             material_texto: textoMaterial.trim() || null,
             materia: nomeMateriaMaterial.trim() || null,
-            quantidade: quantidade,
+            quantidade,
             tipo_questao: tipoQuestao,
-            dificuldade: dificuldade,
+            dificuldade,
             nivel: nivelSegmento,
           }),
         );
@@ -321,8 +319,7 @@ function DashboardContent() {
         body = form;
       } else {
         body = {
-          ano_escolar:
-            nivelSegmento === "superior" ? "Ensino Superior" : anoEscolar,
+          ano_escolar: nivelSegmento === "superior" ? "Ensino Superior" : anoEscolar,
           nivel: nivelSegmento,
           curso: nivelSegmento === "superior" ? curso.trim() : null,
           disciplina: nivelSegmento === "superior" ? disciplina.trim() : null,
@@ -333,28 +330,22 @@ function DashboardContent() {
                 ? materiaUnica
                 : materiasMultiplas.join(", "),
           topico: topicos.length > 0 ? topicos.join(", ") : "Geral",
-          quantidade: quantidade,
+          quantidade,
           tipo_questao: tipoQuestao,
-          priorizar_oficiais:
-            nivelSegmento === "superior" ? false : priorizarOficiais,
-          dificuldade: dificuldade,
+          priorizar_oficiais: nivelSegmento === "superior" ? false : priorizarOficiais,
+          dificuldade,
         };
       }
 
-      const res = await api<SimuladoGerado>("/simulado/gerar", {
-        method: "POST",
-        body,
-        timeoutMs: TIMEOUT_IA_MS,
-      });
+      const res = await api<SimuladoGerado>("/simulado/gerar", { method: "POST", body, timeoutMs: TIMEOUT_IA_MS });
       setSimuladoId(res.simulado_id);
       setQuestoes(res.questoes);
-      if (modoCriacao === "material") {
-        setNomeSimuladoCustom(res.nome);
-      }
+      if (modoCriacao === "material") setNomeSimuladoCustom(res.nome);
       setFocusMode(true);
     } catch (error) {
       console.error("Erro ao gerar simulado", error);
-      alert(
+      avisar(
+        "erro",
         error instanceof ApiError && error.status >= 500 && error.status !== 503
           ? `Não foi possível gerar o simulado: ${error.message}`
           : mensagemDeErro(error, "Erro ao gerar simulado. Verifique sua conexão e tente novamente."),
@@ -366,34 +357,30 @@ function DashboardContent() {
 
   // A correção acontece no servidor, com o gabarito do banco. O navegador só envia as respostas.
   const finalizarSimulado = async () => {
-    if (!user) return;
+    if (!user || finalizando) return;
     if (!simuladoId) {
-      return alert("Este simulado foi criado em uma versão anterior e não pode ser corrigido. Gere um novo simulado.");
+      return avisar("erro", "Este simulado foi criado em uma versão anterior e não pode ser corrigido. Gere um novo simulado.");
     }
-    if (Object.keys(respostas).length < questoes.length) {
-      return alert("Responda todas as questões antes de finalizar!");
+    if (questoesRespondidas < questoes.length) {
+      return avisar("erro", `Ainda faltam ${questoes.length - questoesRespondidas} questão(ões) para responder.`);
     }
     setFinalizando(true);
     try {
       const res = await api<SimuladoCorrigido>("/simulado/finalizar", {
         method: "POST",
-        body: {
-          simulado_id: simuladoId,
-          respostas,
-          nome_simulado: nomeSimuladoCustom || undefined,
-        },
+        body: { simulado_id: simuladoId, respostas, nome_simulado: nomeSimuladoCustom || undefined },
         timeoutMs: TIMEOUT_IA_MS,
       });
-
       // As questões voltam com o gabarito liberado para exibir o feedback.
       setQuestoes(res.questoes);
       setResultados(res.resultados);
       setNotaGeral(res.nota_geral);
       setSimuladoFinalizado(true);
-      setPaginaAtual(1); // Volta pra 1 pra ver os feedbacks
+      setPaginaAtual(1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       console.error("Erro ao finalizar simulado", error);
-      alert(mensagemDeErro(error, "Erro ao conectar com a IA de correção."));
+      avisar("erro", mensagemDeErro(error, "Erro ao conectar com a IA de correção. Suas respostas foram mantidas; tente de novo."));
     } finally {
       setFinalizando(false);
     }
@@ -414,948 +401,705 @@ function DashboardContent() {
       setPaginaAtual(1);
     } catch (error) {
       console.error("Erro ao refazer simulado", error);
-      alert(mensagemDeErro(error, "Não foi possível refazer o simulado."));
+      avisar("erro", mensagemDeErro(error, "Não foi possível refazer o simulado."));
     } finally {
       setRefazendo(false);
     }
   };
 
-  const itensPorPagina = 3;
-  const totalPaginas = Math.ceil(questoes.length / itensPorPagina);
-  const paginatedQuestoes = questoes.slice(
-    (paginaAtual - 1) * itensPorPagina,
-    paginaAtual * itensPorPagina,
-  );
+  const descartarSimulado = () => {
+    setConfirmandoNovo(false);
+    setSimuladoId(null);
+    setQuestoes([]);
+    setRespostas({});
+    setResultados(null);
+    setSimuladoFinalizado(false);
+    setNotaGeral(null);
+    setNomeSimuladoCustom(null);
+    setFocusMode(false);
+  };
 
-  const handleIrParaQuestao = (index: number) => {
-    const pageOfQuestao = Math.floor(index / itensPorPagina) + 1;
-    setPaginaAtual(pageOfQuestao);
+  const questoesRespondidas = questoes.filter((q) => (respostas[q.id] || "").trim() !== "").length;
+  const faltam = questoes.length - questoesRespondidas;
+  const totalPaginas = Math.ceil(questoes.length / ITENS_POR_PAGINA);
+  const paginadas = questoes.slice((paginaAtual - 1) * ITENS_POR_PAGINA, paginaAtual * ITENS_POR_PAGINA);
+  const discursivas = questoes.filter((q) => q.tipo_questao === "Aberta").length;
+
+  const irParaQuestao = (index: number) => {
+    setPaginaAtual(Math.floor(index / ITENS_POR_PAGINA) + 1);
     const questao = questoes[index];
     if (questao) {
       setTimeout(() => {
         const el = document.getElementById(`questao-card-${questao.id}`);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        el?.focus({ preventScroll: true });
       }, 100);
     }
+  };
+
+  const mudarPagina = (pagina: number) => {
+    setPaginaAtual(pagina);
+    document.getElementById("caderno-questoes")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   if (loading) return <LoadingScreen text="Carregando painel..." />;
   if (!user) return null;
 
+  const tituloCaderno =
+    nomeSimuladoCustom ||
+    (nivelSegmento === "superior"
+      ? disciplina || curso || "Graduação"
+      : modoMateria === "Única"
+        ? materiaUnica
+        : materiasMultiplas.join(", "));
+
+  const tempoGeracao = modoCriacao === "material" ? tempos?.geracao_material : tempos?.geracao;
+  const emailExibido = showEmail ? user.email : user.email?.replace(/(.{2})(.*)(@.*)/, "$1***$3");
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-3 sm:p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <header className="flex justify-between items-center mb-8 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            Lumen Dashboard
-          </h1>
-          <div className="flex items-center gap-4">
+        <header className="flex flex-wrap justify-between items-center gap-3 mb-6 md:mb-8 bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+          <Link href="/home" className="flex items-center gap-2 text-xl font-bold text-blue-700 dark:text-blue-400">
+            <Sparkles size={22} aria-hidden="true" /> Lumen
+          </Link>
+          <nav aria-label="Principal" className="flex flex-wrap items-center gap-2 sm:gap-3">
             <Link
               href="/home"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 dark:bg-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             >
-              <HomeIcon size={16} /> Início
+              <HomeIcon size={16} aria-hidden="true" /> <span className="hidden sm:inline">Início</span>
+              <span className="sr-only sm:hidden">Início</span>
             </Link>
             <Link
               href="/desempenho"
-              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-300 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
             >
-              <BarChart2 size={16} /> Meu Desempenho
+              <BarChart2 size={16} aria-hidden="true" /> <span className="hidden sm:inline">Meu desempenho</span>
+              <span className="sr-only sm:hidden">Meu desempenho</span>
             </Link>
-
             <button
+              type="button"
               onClick={() => setFocusMode(!focusMode)}
-              className="p-2 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-              title="Modo Foco"
+              aria-pressed={focusMode}
+              className="p-2 rounded-md text-gray-600 hover:text-blue-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-blue-400 dark:hover:bg-gray-700 transition-colors"
+              title={focusMode ? "Mostrar painel de configuração" : "Modo foco: esconder o painel de configuração"}
             >
-              {focusMode ? <Minimize size={20} /> : <Maximize size={20} />}
+              {focusMode ? <Minimize size={20} aria-hidden="true" /> : <Maximize size={20} aria-hidden="true" />}
+              <span className="sr-only">Modo foco</span>
             </button>
-
             <ThemeToggle />
-
-            <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">
-              <span className="text-sm text-gray-600 dark:text-gray-300">
-                {showEmail
-                  ? user.email
-                  : user.email?.replace(/(.{2})(.*)(@.*)/, "$1***$3")}
-              </span>
+            <div className="flex items-center gap-1 pl-3 pr-1 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">
+              <span className="text-sm text-gray-700 dark:text-gray-200 max-w-[10rem] sm:max-w-none truncate">{emailExibido}</span>
               <button
+                type="button"
                 onClick={() => setShowEmail(!showEmail)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                className="p-1 rounded-full text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
+                aria-label={showEmail ? "Ocultar e-mail" : "Mostrar e-mail"}
+                aria-pressed={showEmail}
               >
-                {showEmail ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showEmail ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
               </button>
             </div>
-
             <button
+              type="button"
               onClick={() => auth.signOut()}
-              className="text-sm text-red-500 hover:text-red-600 font-medium"
+              className="flex items-center gap-1.5 px-2 py-1.5 text-sm font-medium text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
             >
-              Sair
+              <LogOut size={16} aria-hidden="true" /> Sair
             </button>
-          </div>
+          </nav>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <main id="conteudo" className="grid grid-cols-1 lg:grid-cols-[20rem_minmax(0,1fr)] gap-6">
+          <h1 className="sr-only">Criar e responder simulado</h1>
+
           {!focusMode && (
-            <div className="md:col-span-1 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
-              <h2 className="font-semibold text-lg border-b dark:border-gray-700 pb-2">
-                Configurar Bateria
+            <form
+              onSubmit={gerarSimulado}
+              aria-labelledby={`${ids}-titulo-config`}
+              className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 space-y-5 self-start"
+            >
+              <h2 id={`${ids}-titulo-config`} className="font-semibold text-lg border-b border-gray-200 dark:border-gray-700 pb-2">
+                Configurar simulado
               </h2>
 
-              {/* Seletor de Modo: Currículo Tradicional vs Material Próprio */}
-              <div className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-gray-700/60 p-1 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setModoCriacao("curriculo")}
-                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg transition-all ${
-                    modoCriacao === "curriculo"
-                      ? "bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-xs"
-                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                  }`}
-                >
-                  <BookOpen size={14} /> Currículo / Matérias
-                </button>
-                <button
-                  type="button"
+              <div role="group" aria-label="Como criar as questões" className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-gray-700/60 p-1 rounded-xl">
+                <BotaoOpcao ativo={modoCriacao === "curriculo"} onClick={() => setModoCriacao("curriculo")}>
+                  <BookOpen size={15} aria-hidden="true" /> Por matéria
+                </BotaoOpcao>
+                <BotaoOpcao
+                  ativo={modoCriacao === "material"}
                   onClick={() => setModoCriacao("material")}
-                  className={`flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-lg transition-all ${
-                    modoCriacao === "material"
-                      ? "bg-blue-600 text-white shadow-xs"
-                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                  }`}
+                  corAtiva="bg-blue-600 text-white shadow-sm"
                 >
-                  <Paperclip size={14} /> PDF / Slides
-                </button>
+                  <Paperclip size={15} aria-hidden="true" /> Meu material
+                </BotaoOpcao>
               </div>
 
               {modoCriacao === "material" ? (
                 <div className="space-y-4">
-                  {/* Upload de Arquivos */}
                   <div>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Arquivos de Aula / Slides
-                      </label>
-                      <span className="text-[11px] text-gray-400">Até 5 arquivos</span>
+                    <div className="flex justify-between items-baseline mb-1.5">
+                      <span id={`${ids}-arquivos-rotulo`} className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Arquivos de aula
+                      </span>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">até {MAX_ARQUIVOS} arquivos</span>
                     </div>
 
+                    {/* Input visível para o teclado (sr-only), mas representado pela área de arrastar. */}
                     <input
                       ref={fileInputRef}
+                      id={`${ids}-arquivos`}
                       type="file"
                       accept=".pdf,.txt,.md"
                       multiple
-                      onChange={handleSelecionarArquivos}
-                      className="hidden"
-                      id="input-material-arquivos"
+                      onChange={(e) => adicionarArquivos(e.target.files)}
+                      className="peer sr-only"
+                      aria-describedby={`${ids}-arquivos-dica`}
                     />
-
                     <label
-                      htmlFor="input-material-arquivos"
-                      className="border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer bg-gray-50 dark:bg-gray-800/50 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all text-center group"
+                      htmlFor={`${ids}-arquivos`}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setArrastando(true);
+                      }}
+                      onDragLeave={() => setArrastando(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setArrastando(false);
+                        adicionarArquivos(e.dataTransfer.files);
+                      }}
+                      className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer text-center transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-gray-800 ${
+                        arrastando
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30"
+                          : "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20"
+                      }`}
                     >
-                      <UploadCloud
-                        size={28}
-                        className="text-gray-400 group-hover:text-blue-500 mb-2 transition-colors"
-                      />
-                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">
-                        Clique ou arraste seus PDFs aqui
+                      <UploadCloud size={28} className="text-gray-500 dark:text-gray-400 mb-2" aria-hidden="true" />
+                      <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                        {arrastando ? "Solte os arquivos aqui" : "Clique ou arraste seus arquivos"}
                       </span>
-                      <span className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                        PDF de slides, apostilas ou resumos (máx. 15MB cada)
+                      <span id={`${ids}-arquivos-dica`} className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                        PDF, TXT ou MD · até {MAX_BYTES_ARQUIVO / MB} MB cada, {MAX_BYTES_TOTAL / MB} MB no total
                       </span>
                     </label>
 
-                    {/* Lista de Arquivos Selecionados */}
                     {arquivosMaterial.length > 0 && (
-                      <div className="mt-3 space-y-2">
+                      <ul className="mt-3 space-y-2" aria-label="Arquivos selecionados">
                         {arquivosMaterial.map((arq, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between p-2 rounded-lg bg-blue-50/70 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-xs"
+                          <li
+                            key={`${arq.nome}-${idx}`}
+                            className="flex items-center justify-between p-2 rounded-lg bg-blue-50/70 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-sm"
                           >
-                            <div className="flex items-center gap-2 truncate pr-2">
-                              <FileText
-                                size={16}
-                                className="text-blue-600 dark:text-blue-400 shrink-0"
-                              />
-                              <span
-                                className="font-medium text-gray-800 dark:text-gray-200 truncate"
-                                title={arq.nome}
-                              >
+                            <span className="flex items-center gap-2 min-w-0 pr-2">
+                              <FileText size={16} className="text-blue-600 dark:text-blue-400 shrink-0" aria-hidden="true" />
+                              <span className="font-medium text-gray-800 dark:text-gray-100 truncate" title={arq.nome}>
                                 {arq.nome}
                               </span>
-                              <span className="text-gray-500 dark:text-gray-400 shrink-0 text-[10px]">
-                                ({(arq.tamanho / (1024 * 1024)).toFixed(1)} MB)
+                              <span className="text-gray-600 dark:text-gray-400 shrink-0 text-xs">
+                                ({(arq.tamanho / MB).toFixed(1)} MB)
                               </span>
-                            </div>
+                            </span>
                             <button
                               type="button"
-                              onClick={() => removerArquivo(idx)}
-                              className="text-red-400 hover:text-red-600 dark:hover:text-red-300 p-1"
-                              title="Remover arquivo"
+                              onClick={() => setArquivosMaterial((prev) => prev.filter((_, i) => i !== idx))}
+                              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 p-1 rounded"
+                              aria-label={`Remover o arquivo ${arq.nome}`}
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={15} aria-hidden="true" />
                             </button>
-                          </div>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     )}
                   </div>
 
-                  {/* Toggle de Anotações / Texto */}
                   <div>
                     <button
                       type="button"
                       onClick={() => setExibirAnotacoes(!exibirAnotacoes)}
-                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
+                      aria-expanded={exibirAnotacoes}
+                      aria-controls={`${ids}-anotacoes`}
+                      className="text-sm text-blue-700 dark:text-blue-400 hover:underline font-medium"
                     >
-                      {exibirAnotacoes
-                        ? "- Ocultar anotações em texto"
-                        : "+ Adicionar anotações de aula"}
+                      {exibirAnotacoes ? "− Ocultar anotações" : "+ Adicionar anotações de aula"}
                     </button>
-
                     {exibirAnotacoes && (
-                      <textarea
-                        rows={3}
-                        value={textoMaterial}
-                        onChange={(e) => setTextoMaterial(e.target.value)}
-                        placeholder="Cole aqui pontos importantes, tópicos que o professor enfatizou ou seu resumo..."
-                        className="w-full mt-2 border dark:border-gray-600 rounded-lg p-2 text-xs text-black dark:text-white bg-white dark:bg-gray-800 focus:ring-1 focus:ring-blue-500"
-                      />
+                      <div className="mt-2">
+                        <label htmlFor={`${ids}-anotacoes`} className="sr-only">
+                          Anotações de aula
+                        </label>
+                        <textarea
+                          id={`${ids}-anotacoes`}
+                          rows={4}
+                          value={textoMaterial}
+                          onChange={(e) => setTextoMaterial(e.target.value)}
+                          placeholder="Cole aqui os pontos importantes, o que o professor enfatizou ou seu resumo..."
+                          className={ESTILO_CAMPO}
+                        />
+                      </div>
                     )}
                   </div>
 
-                  {/* Nome da Matéria / Simulado Opcional */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
-                      Identificação da Matéria (Opcional)
+                    <label htmlFor={`${ids}-nome-material`} className={ESTILO_ROTULO}>
+                      Nome da matéria <span className="font-normal text-gray-600 dark:text-gray-400">(opcional)</span>
                     </label>
                     <input
+                      id={`${ids}-nome-material`}
                       type="text"
                       value={nomeMateriaMaterial}
                       onChange={(e) => setNomeMateriaMaterial(e.target.value)}
-                      placeholder="Ex: Arquitetura de Software - Aula 5"
-                      className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 text-xs"
+                      placeholder="Ex.: Arquitetura de Software – Aula 5"
+                      className={ESTILO_CAMPO}
                     />
-                  </div>
-
-                  {/* Quantidade de Questões */}
-                  <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      Quantidade: {quantidade} questões
-                    </label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="20"
-                      value={quantidade}
-                      onChange={(e) => setQuantidade(Number(e.target.value))}
-                      className="w-full accent-blue-600"
-                    />
-                  </div>
-
-                  {/* Tipo de Questão */}
-                  <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      Tipo de Questão
-                    </label>
-                    <select
-                      className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800"
-                      value={tipoQuestao}
-                      onChange={(e) => setTipoQuestao(e.target.value)}
-                    >
-                      <option value="Fechada">Múltipla Escolha</option>
-                      <option value="Aberta">Discursiva (Aberta)</option>
-                      <option value="Mesclada">Mesclada (Múltipla + Discursiva)</option>
-                    </select>
-                  </div>
-
-                  {/* Dificuldade */}
-                  <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      Nível de Dificuldade
-                    </label>
-                    <select
-                      className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 mb-3"
-                      value={dificuldade}
-                      onChange={(e) => setDificuldade(e.target.value)}
-                    >
-                      <option>Iniciante (Conceitual / Básico)</option>
-                      <option>Intermediário (Padrão de Prova)</option>
-                      <option>Avançado (Exames / Padrão Universitário)</option>
-                    </select>
                   </div>
                 </div>
               ) : (
                 <>
-                  {/* Seletor de Nível */}
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
-                      Nível de Ensino
-                    </label>
-                    <div className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNivelSegmento("fundamental");
-                          setAnoEscolar("6º Ano");
-                        }}
-                        className={`py-1.5 text-xs font-medium rounded-md transition-all ${
-                          nivelSegmento === "fundamental"
-                            ? "bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-xs"
-                            : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                        }`}
-                      >
-                        Fundamental
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNivelSegmento("medio");
-                          setAnoEscolar("Pré-Vestibular/ENEM");
-                        }}
-                        className={`py-1.5 text-xs font-medium rounded-md transition-all ${
-                          nivelSegmento === "medio"
-                            ? "bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-xs"
-                            : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                        }`}
-                      >
-                        Médio
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNivelSegmento("superior");
-                          setAnoEscolar("Ensino Superior");
-                        }}
-                        className={`py-1.5 text-xs font-medium rounded-md transition-all ${
-                          nivelSegmento === "superior"
-                            ? "bg-indigo-600 text-white shadow-xs"
-                            : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                        }`}
-                      >
-                        Superior
-                      </button>
+                    <span id={`${ids}-nivel`} className={ESTILO_ROTULO}>
+                      Nível de ensino
+                    </span>
+                    <div role="group" aria-labelledby={`${ids}-nivel`} className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg">
+                      {NIVEIS.map((n) => (
+                        <BotaoOpcao
+                          key={n.id}
+                          ativo={nivelSegmento === n.id}
+                          onClick={() => escolherNivel(n.id)}
+                          corAtiva={
+                            n.id === "superior"
+                              ? "bg-indigo-600 text-white shadow-sm"
+                              : "bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 shadow-sm"
+                          }
+                        >
+                          {n.rotulo}
+                        </BotaoOpcao>
+                      ))}
                     </div>
                   </div>
 
                   {nivelSegmento === "superior" ? (
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1 font-medium">
-                          Curso de Graduação
+                        <label htmlFor={`${ids}-curso`} className={ESTILO_ROTULO}>
+                          Curso de graduação
                         </label>
                         <input
+                          id={`${ids}-curso`}
                           type="text"
-                          className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 text-sm"
+                          className={ESTILO_CAMPO}
                           value={curso}
                           onChange={(e) => setCurso(e.target.value)}
-                          placeholder="Ex: Direito, Engenharia de Software, Medicina..."
+                          placeholder="Ex.: Direito, Engenharia de Software, Medicina..."
                         />
                       </div>
                       <div>
-                        <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1 font-medium">
-                          Disciplina / Matéria Matriculada
+                        <label htmlFor={`${ids}-disciplina`} className={ESTILO_ROTULO}>
+                          Disciplina
                         </label>
                         <input
+                          id={`${ids}-disciplina`}
                           type="text"
-                          className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 text-sm"
+                          className={ESTILO_CAMPO}
                           value={disciplina}
                           onChange={(e) => setDisciplina(e.target.value)}
-                          placeholder="Ex: Cálculo I, Direito Penal, Anatomia..."
+                          placeholder="Ex.: Cálculo I, Direito Penal, Anatomia..."
                         />
                       </div>
                     </div>
                   ) : (
                     <>
                       <div>
-                        <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                          Nível Escolar
+                        <label htmlFor={`${ids}-ano`} className={ESTILO_ROTULO}>
+                          Ano escolar
                         </label>
-                        <select
-                          className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800"
-                          value={anoEscolar}
-                          onChange={(e) => setAnoEscolar(e.target.value)}
-                        >
-                          {nivelSegmento === "fundamental" ? (
-                            <>
-                              <option>1º Ano</option>
-                              <option>2º Ano</option>
-                              <option>3º Ano</option>
-                              <option>4º Ano</option>
-                              <option>5º Ano</option>
-                              <option>6º Ano</option>
-                              <option>7º Ano</option>
-                              <option>8º Ano</option>
-                              <option>9º Ano</option>
-                            </>
-                          ) : (
-                            <>
-                              <option>1º Ano EM</option>
-                              <option>2º Ano EM</option>
-                              <option>3º Ano EM</option>
-                              <option>Pré-Vestibular/ENEM</option>
-                            </>
-                          )}
+                        <select id={`${ids}-ano`} className={ESTILO_CAMPO} value={anoEscolar} onChange={(e) => setAnoEscolar(e.target.value)}>
+                          {(nivelSegmento === "fundamental" ? ANOS_FUNDAMENTAL : ANOS_MEDIO).map((ano) => (
+                            <option key={ano}>{ano}</option>
+                          ))}
                         </select>
                       </div>
 
                       <div>
-                        <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                          Modo de Matéria
-                        </label>
-                        <div className="flex gap-2 mb-2">
-                          <button
-                            type="button"
-                            onClick={() => setModoMateria("Única")}
-                            className={`flex-1 py-1 text-sm rounded ${modoMateria === "Única" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}
-                          >
-                            Única
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setModoMateria("Múltiplas")}
-                            className={`flex-1 py-1 text-sm rounded ${modoMateria === "Múltiplas" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"}`}
-                          >
+                        <span id={`${ids}-modo-materia`} className={ESTILO_ROTULO}>
+                          Matérias
+                        </span>
+                        <div role="group" aria-labelledby={`${ids}-modo-materia`} className="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-gray-700/50 p-1 rounded-lg mb-2">
+                          <BotaoOpcao ativo={modoMateria === "Única"} onClick={() => setModoMateria("Única")}>
+                            Uma matéria
+                          </BotaoOpcao>
+                          <BotaoOpcao ativo={modoMateria === "Múltiplas"} onClick={() => setModoMateria("Múltiplas")}>
                             Várias
-                          </button>
+                          </BotaoOpcao>
                         </div>
 
                         {modoMateria === "Única" ? (
-                          <select
-                            className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800"
-                            value={materiaUnica}
-                            onChange={(e) => setMateriaUnica(e.target.value)}
-                          >
-                            <option>Matemática</option>
-                            <option>Português</option>
-                            <option>História</option>
-                            <option>Geografia</option>
-                            <option>Física</option>
-                            <option>Química</option>
-                            <option>Biologia</option>
-                            <option>Filosofia</option>
-                            <option>Sociologia</option>
-                            <option>Inglês</option>
-                            <option>Espanhol</option>
-                          </select>
+                          <>
+                            <label htmlFor={`${ids}-materia`} className="sr-only">
+                              Matéria
+                            </label>
+                            <select id={`${ids}-materia`} className={ESTILO_CAMPO} value={materiaUnica} onChange={(e) => setMateriaUnica(e.target.value)}>
+                              {MATERIAS.map((m) => (
+                                <option key={m}>{m}</option>
+                              ))}
+                            </select>
+                          </>
                         ) : (
-                          <div className="max-h-32 overflow-y-auto border dark:border-gray-600 rounded p-2 space-y-1">
-                            {[
-                              "Matemática",
-                              "Português",
-                              "História",
-                              "Geografia",
-                              "Física",
-                              "Química",
-                              "Biologia",
-                              "Filosofia",
-                              "Sociologia",
-                              "Inglês",
-                              "Espanhol",
-                            ].map((mat) => (
-                              <label
-                                key={mat}
-                                className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
-                              >
+                          <fieldset className="max-h-40 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-2 space-y-1">
+                            <legend className="sr-only">Escolha as matérias</legend>
+                            {MATERIAS.map((mat) => (
+                              <label key={mat} className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200 py-0.5">
                                 <input
                                   type="checkbox"
+                                  className="w-4 h-4 accent-blue-600"
                                   checked={materiasMultiplas.includes(mat)}
-                                  onChange={(e) => {
-                                    if (e.target.checked)
-                                      setMateriasMultiplas([
-                                        ...materiasMultiplas,
-                                        mat,
-                                      ]);
-                                    else
-                                      setMateriasMultiplas(
-                                        materiasMultiplas.filter((m) => m !== mat),
-                                      );
-                                  }}
+                                  onChange={(e) =>
+                                    setMateriasMultiplas(
+                                      e.target.checked ? [...materiasMultiplas, mat] : materiasMultiplas.filter((m) => m !== mat),
+                                    )
+                                  }
                                 />
                                 {mat}
                               </label>
                             ))}
-                          </div>
+                          </fieldset>
                         )}
                       </div>
                     </>
                   )}
 
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label htmlFor={`${ids}-topico`} className={ESTILO_ROTULO}>
                       Tópicos
                     </label>
-                    <div className="flex gap-2 mb-2">
+                    <div className="flex gap-2">
                       <input
+                        id={`${ids}-topico`}
                         type="text"
-                        className="flex-1 border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 text-sm"
+                        className={`${ESTILO_CAMPO} flex-1`}
                         value={novoTopico}
                         onChange={(e) => setNovoTopico(e.target.value)}
-                        placeholder={
-                          nivelSegmento === "superior"
-                            ? "Ex: Derivadas, Crimes Contra a Vida..."
-                            : "Ex: Frações, Revolução Francesa..."
-                        }
+                        aria-describedby={`${ids}-topico-dica`}
+                        placeholder={nivelSegmento === "superior" ? "Ex.: Derivadas" : "Ex.: Frações"}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" && novoTopico.trim()) {
-                            if (!topicos.includes(novoTopico.trim()))
-                              setTopicos([...topicos, novoTopico.trim()]);
-                            setNovoTopico("");
+                          if (e.key === "Enter") {
+                            e.preventDefault(); // Enter adiciona o tópico em vez de enviar o formulário
+                            adicionarTopico();
                           }
                         }}
                       />
                       <button
                         type="button"
-                        onClick={() => {
-                          if (
-                            novoTopico.trim() &&
-                            !topicos.includes(novoTopico.trim())
-                          ) {
-                            setTopicos([...topicos, novoTopico.trim()]);
-                            setNovoTopico("");
-                          }
-                        }}
-                        className="bg-gray-200 dark:bg-gray-700 p-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                        onClick={adicionarTopico}
+                        className="bg-gray-200 dark:bg-gray-700 px-2.5 rounded-lg text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
+                        aria-label="Adicionar tópico"
                       >
-                        <Plus size={20} />
+                        <Plus size={20} aria-hidden="true" />
                       </button>
                     </div>
+                    <p id={`${ids}-topico-dica`} className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      Digite e pressione Enter para adicionar cada tópico.
+                    </p>
                     {topicos.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
+                      <ul className="flex flex-wrap gap-2 mt-2" aria-label="Tópicos escolhidos">
                         {topicos.map((t) => (
-                          <span
-                            key={t}
-                            className="flex items-center gap-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded text-xs"
-                          >
+                          <li key={t} className="flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 pl-2 pr-1 py-1 rounded text-sm">
                             {t}
                             <button
                               type="button"
-                              onClick={() =>
-                                setTopicos(topicos.filter((item) => item !== t))
-                              }
-                              className="text-blue-500 hover:text-blue-700 dark:hover:text-blue-200"
+                              onClick={() => setTopicos(topicos.filter((item) => item !== t))}
+                              className="p-0.5 rounded hover:bg-blue-200 dark:hover:bg-blue-800"
+                              aria-label={`Remover o tópico ${t}`}
                             >
-                              <X size={14} />
+                              <X size={14} aria-hidden="true" />
                             </button>
-                          </span>
+                          </li>
                         ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      Quantidade: {quantidade}
-                    </label>
-                    <input
-                      type="range"
-                      min="1"
-                      max="20"
-                      value={quantidade}
-                      onChange={(e) => setQuantidade(Number(e.target.value))}
-                      className="w-full accent-blue-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      Tipo de Questão
-                    </label>
-                    <select
-                      className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 mb-3"
-                      value={tipoQuestao}
-                      onChange={(e) => setTipoQuestao(e.target.value)}
-                    >
-                      <option value="Fechada">Múltipla Escolha</option>
-                      <option value="Aberta">Discursiva (Aberta)</option>
-                      <option value="Mesclada">
-                        Mesclada (Múltipla + Discursiva)
-                      </option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      Nível de Dificuldade (Para IA)
-                    </label>
-                    <select
-                      className="w-full border dark:border-gray-600 rounded p-2 text-black dark:text-white bg-white dark:bg-gray-800 mb-3"
-                      value={dificuldade}
-                      onChange={(e) => setDificuldade(e.target.value)}
-                    >
-                      {nivelSegmento === "superior" ? (
-                        <>
-                          <option>Iniciante (Conceitual / Básico)</option>
-                          <option>Intermediário (Padrão de Prova)</option>
-                          <option>Avançado (Exames / ENADE / OAB)</option>
-                        </>
-                      ) : (
-                        <>
-                          <option>Iniciante</option>
-                          <option>Intermediário (Padrão)</option>
-                          <option>Avançado / Vestibular</option>
-                        </>
-                      )}
-                    </select>
-
-                    {nivelSegmento !== "superior" && (
-                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                        <input
-                          type="checkbox"
-                          checked={priorizarOficiais}
-                          onChange={(e) => setPriorizarOficiais(e.target.checked)}
-                          className="rounded text-blue-600"
-                        />
-                        Priorizar Questões Oficiais (Provas)
-                      </label>
+                      </ul>
                     )}
                   </div>
                 </>
               )}
 
-              <button
-                onClick={gerarSimulado}
-                disabled={gerando}
-                className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm transition-all"
-              >
-                {gerando ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Gerando com IA...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={16} />
-                    {modoCriacao === "material"
-                      ? "Gerar a partir do Material"
-                      : "Gerar Simulado"}
-                  </>
+              <div>
+                <label htmlFor={`${ids}-quantidade`} className={ESTILO_ROTULO}>
+                  Quantidade: <strong>{quantidade} questões</strong>
+                </label>
+                <input
+                  id={`${ids}-quantidade`}
+                  type="range"
+                  min="1"
+                  max="20"
+                  value={quantidade}
+                  onChange={(e) => setQuantidade(Number(e.target.value))}
+                  aria-valuetext={`${quantidade} questões`}
+                  className="w-full accent-blue-600"
+                />
+              </div>
+
+              <div>
+                <label htmlFor={`${ids}-tipo`} className={ESTILO_ROTULO}>
+                  Tipo de questão
+                </label>
+                <select id={`${ids}-tipo`} className={ESTILO_CAMPO} value={tipoQuestao} onChange={(e) => setTipoQuestao(e.target.value)}>
+                  <option value="Fechada">Múltipla escolha</option>
+                  <option value="Aberta">Discursiva (aberta)</option>
+                  <option value="Mesclada">Mesclada (múltipla + discursiva)</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor={`${ids}-dificuldade`} className={ESTILO_ROTULO}>
+                  Nível de dificuldade
+                </label>
+                <select id={`${ids}-dificuldade`} className={ESTILO_CAMPO} value={dificuldade} onChange={(e) => setDificuldade(e.target.value)}>
+                  {modoCriacao === "material" || nivelSegmento === "superior" ? (
+                    <>
+                      <option>Iniciante (Conceitual / Básico)</option>
+                      <option>Intermediário (Padrão de Prova)</option>
+                      <option>{nivelSegmento === "superior" ? "Avançado (Exames / ENADE / OAB)" : "Avançado (Exames / Padrão Universitário)"}</option>
+                    </>
+                  ) : (
+                    <>
+                      <option>Iniciante</option>
+                      <option>Intermediário (Padrão)</option>
+                      <option>Avançado / Vestibular</option>
+                    </>
+                  )}
+                </select>
+                {modoCriacao === "curriculo" && nivelSegmento !== "superior" && (
+                  <label className="flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200 mt-3">
+                    <input
+                      type="checkbox"
+                      checked={priorizarOficiais}
+                      onChange={(e) => setPriorizarOficiais(e.target.checked)}
+                      className="w-4 h-4 accent-blue-600"
+                    />
+                    Priorizar questões oficiais (provas reais)
+                  </label>
                 )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={gerando}
+                className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <Sparkles size={16} aria-hidden="true" />
+                {gerando ? "Gerando..." : modoCriacao === "material" ? "Gerar a partir do material" : "Gerar simulado"}
               </button>
-            </div>
+              {tempoGeracao && tempoGeracao.amostras > 0 && (
+                <p className="text-xs text-center text-gray-600 dark:text-gray-400 -mt-2">
+                  Tempo médio de geração: ~{tempoGeracao.segundos} s
+                </p>
+              )}
+            </form>
           )}
 
-          <div className={focusMode ? "md:col-span-4" : "md:col-span-3"}>
-            {questoes.length > 0 ? (
+          <div className={focusMode ? "lg:col-span-2" : "min-w-0"}>
+            {questoes.length > 0 && !gerando ? (
               <div className="flex flex-col xl:flex-row gap-6 justify-center items-start w-full">
-                {/* Espaço Principal da Prova (Padrão PDF / Folha) */}
-                <div className="w-full max-w-4xl space-y-6 flex-1">
-                  {/* Cabeçalho do Caderno de Questões (Padrão PDF / Documento) */}
+                <section id="caderno-questoes" aria-label="Caderno de questões" className="w-full max-w-4xl space-y-6 flex-1 scroll-mt-4">
                   <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-wrap justify-between items-center gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs uppercase tracking-wider font-bold px-2.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
-                          Caderno de Questões
-                        </span>
-                        {nomeSimuladoCustom && (
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
-                            {nomeSimuladoCustom}
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1">
-                        {nomeSimuladoCustom ||
-                          (nivelSegmento === "superior"
-                            ? disciplina || curso || "Graduação"
-                            : modoMateria === "Única"
-                              ? materiaUnica
-                              : materiasMultiplas.join(", "))}
-                      </h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        Total: {questoes.length} questões • Respondidas:{" "}
-                        {Object.keys(respostas).length}/{questoes.length}
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-wider font-bold text-blue-700 dark:text-blue-300">Caderno de questões</p>
+                      <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1 break-words">{tituloCaderno}</h2>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                        {questoes.length} {questoes.length === 1 ? "questão" : "questões"} · {questoesRespondidas}{" "}
+                        {questoesRespondidas === 1 ? "respondida" : "respondidas"}
                       </p>
                     </div>
-
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
-                        onClick={() => {
-                          if (
-                            confirm(
-                              "Deseja fechar este simulado e iniciar um novo?",
-                            )
-                          ) {
-                            setSimuladoId(null);
-                            setQuestoes([]);
-                            setRespostas({});
-                            setResultados(null);
-                            setSimuladoFinalizado(false);
-                            setNotaGeral(null);
-                            setNomeSimuladoCustom(null);
-                          }
-                        }}
-                        className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 font-medium px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
-                        title="Descartar e criar novo simulado"
+                        type="button"
+                        onClick={() => setConfirmandoNovo(true)}
+                        className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-red-700 dark:text-gray-300 dark:hover:text-red-400 font-medium px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                       >
-                        <RotateCcw size={14} /> Novo Simulado
+                        <RotateCcw size={15} aria-hidden="true" /> Novo simulado
                       </button>
-
                       <button
+                        type="button"
                         onClick={() => handlePrint()}
-                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3.5 py-2 rounded-lg transition-colors text-sm font-medium shadow-xs"
+                        className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white px-3.5 py-2 rounded-lg transition-colors text-sm font-medium shadow-sm"
                       >
-                        <Printer size={16} />
-                        Exportar PDF
+                        <Printer size={16} aria-hidden="true" /> Exportar PDF
                       </button>
                     </div>
                   </div>
 
+                  {finalizando && discursivas > 0 && (
+                    <EsperaIA
+                      compacto
+                      titulo="Corrigindo suas respostas"
+                      descricao={`A IA está avaliando ${discursivas === 1 ? "sua resposta discursiva" : `suas ${discursivas} respostas discursivas`}. As de múltipla escolha já foram conferidas.`}
+                      segundosMedios={tempos?.correcao.amostras ? tempos.correcao.segundos : null}
+                      segundosPadrao={15}
+                    />
+                  )}
+
                   {simuladoFinalizado && notaGeral !== null && (
-                    <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4 shadow-sm">
+                    <div className="bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 p-6 rounded-2xl flex flex-wrap justify-between items-center gap-4 shadow-sm" role="status">
                       <div>
-                        <h2 className="text-xl font-bold text-blue-800 dark:text-blue-300">
-                          Simulado Finalizado!
-                        </h2>
-                        <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                          Veja seus erros e acertos abaixo.
-                        </p>
+                        <h2 className="text-xl font-bold text-blue-900 dark:text-blue-200">Simulado finalizado!</h2>
+                        <p className="text-sm text-blue-800 dark:text-blue-300 mt-1">Veja abaixo seus acertos, erros e os comentários da correção.</p>
                         <div className="mt-4 flex flex-wrap items-center gap-3">
                           <button
+                            type="button"
                             onClick={refazerSimulado}
                             disabled={refazendo || !simuladoId}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all disabled:opacity-50"
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all disabled:opacity-60"
                           >
-                            <RotateCcw size={16} />{" "}
-                            {refazendo ? "Preparando..." : "Refazer Este Simulado"}
+                            <RotateCcw size={16} aria-hidden="true" /> {refazendo ? "Preparando..." : "Refazer este simulado"}
                           </button>
                           <Link
                             href="/desempenho"
-                            className="flex items-center gap-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold border border-gray-200 dark:border-gray-700 transition-all shadow-xs"
+                            className="flex items-center gap-2 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-semibold border border-gray-300 dark:border-gray-600 transition-all"
                           >
-                            <BarChart2 size={16} /> Ver no Histórico
+                            <BarChart2 size={16} aria-hidden="true" /> Ver no histórico
                           </Link>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-3xl font-black text-blue-700 dark:text-blue-400">
+                        <p className="text-3xl font-black text-blue-800 dark:text-blue-300">
                           {notaGeral.toFixed(0)}
                           <span className="text-lg">/100</span>
-                        </div>
-                        <div className="text-xs text-blue-600 dark:text-blue-500 uppercase tracking-wider font-bold">
-                          Nota Geral
-                        </div>
+                        </p>
+                        <p className="text-xs text-blue-800 dark:text-blue-300 uppercase tracking-wider font-bold">Nota geral</p>
                       </div>
                     </div>
                   )}
 
-                  {paginatedQuestoes.map((q, idx) => {
-                    const globalIndex =
-                      (paginaAtual - 1) * itensPorPagina + idx + 1;
-                    const feedback = resultados?.find(
-                      (r) => r.questao_id === q.id,
-                    );
-
+                  {paginadas.map((q, idx) => {
+                    const numero = (paginaAtual - 1) * ITENS_POR_PAGINA + idx + 1;
+                    const feedback = resultados?.find((r) => r.questao_id === q.id);
+                    const props = {
+                      questao: q,
+                      index: numero,
+                      modo: (simuladoFinalizado ? "feedback" : "prova") as "feedback" | "prova",
+                      respostaSelecionada: respostas[q.id] || null,
+                      onResponder: (resp: string) => setRespostas((atuais) => ({ ...atuais, [q.id]: resp })),
+                      feedback,
+                    };
                     return (
-                      <div key={q.id} id={`questao-card-${q.id}`}>
-                        {q.tipo_questao === "Aberta" ? (
-                          <RenderizadorDiscursiva
-                            questao={q}
-                            index={globalIndex}
-                            modo={simuladoFinalizado ? "feedback" : "prova"}
-                            respostaSelecionada={respostas[q.id] || null}
-                            onResponder={(resp) =>
-                              setRespostas({ ...respostas, [q.id]: resp })
-                            }
-                            feedback={feedback}
-                          />
-                        ) : (
-                          <RenderizadorSimulado
-                            questao={q}
-                            index={globalIndex}
-                            modo={simuladoFinalizado ? "feedback" : "prova"}
-                            respostaSelecionada={respostas[q.id] || null}
-                            onResponder={(resp) =>
-                              setRespostas({ ...respostas, [q.id]: resp })
-                            }
-                            feedback={feedback}
-                          />
-                        )}
+                      <div key={q.id} id={`questao-card-${q.id}`} tabIndex={-1} className="scroll-mt-4 rounded-xl">
+                        {q.tipo_questao === "Aberta" ? <RenderizadorDiscursiva {...props} /> : <RenderizadorSimulado {...props} />}
                       </div>
                     );
                   })}
 
-                  <div className="flex justify-between items-center mt-6 pt-6 border-t dark:border-gray-700">
+                  <nav aria-label="Paginação das questões" className="flex flex-wrap justify-between items-center gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
                     <button
-                      onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                      type="button"
+                      onClick={() => mudarPagina(Math.max(1, paginaAtual - 1))}
                       disabled={paginaAtual === 1}
-                      className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg disabled:opacity-50 text-black dark:text-white font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                      className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg disabled:opacity-50 text-gray-900 dark:text-white font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
                     >
                       Anterior
                     </button>
-                    <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">
+                    <span className="text-gray-700 dark:text-gray-300 text-sm font-medium" aria-live="polite">
                       Página {paginaAtual} de {totalPaginas}
                     </span>
 
                     {paginaAtual < totalPaginas ? (
                       <button
-                        onClick={() =>
-                          setPaginaAtual((p) => Math.min(totalPaginas, p + 1))
-                        }
-                        className="px-4 py-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-700 dark:text-blue-300 font-medium hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                        type="button"
+                        onClick={() => mudarPagina(Math.min(totalPaginas, paginaAtual + 1))}
+                        className="px-4 py-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg text-blue-800 dark:text-blue-200 font-medium hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
                       >
                         Próxima
                       </button>
                     ) : !simuladoFinalizado ? (
-                      <button
-                        onClick={finalizarSimulado}
-                        disabled={
-                          finalizando ||
-                          Object.keys(respostas).length < questoes.length
-                        }
-                        className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
-                      >
-                        {finalizando
-                          ? "Corrigindo IA..."
-                          : "Finalizar Simulado"}
-                      </button>
-                    ) : (
-                      <div className="text-green-600 dark:text-green-400 font-bold">
-                        ✓ Concluído
+                      <div className="flex flex-col items-end gap-1">
+                        <button
+                          type="button"
+                          onClick={finalizarSimulado}
+                          disabled={finalizando}
+                          aria-describedby={faltam > 0 ? `${ids}-faltam` : undefined}
+                          className="px-6 py-2 bg-green-700 text-white font-bold rounded-lg hover:bg-green-800 disabled:opacity-60 shadow-sm transition-colors"
+                        >
+                          {finalizando ? "Corrigindo..." : "Finalizar simulado"}
+                        </button>
+                        {faltam > 0 && (
+                          <span id={`${ids}-faltam`} className="text-xs text-amber-700 dark:text-amber-300">
+                            Faltam {faltam} {faltam === 1 ? "questão" : "questões"} para responder
+                          </span>
+                        )}
                       </div>
+                    ) : (
+                      <span className="text-green-700 dark:text-green-400 font-bold">✓ Concluído</span>
                     )}
-                  </div>
-                </div>
+                  </nav>
+                </section>
 
-                {/* Balão / Painel de Navegação Lateral (Estilo Moodle) */}
                 <NavegacaoQuestionario
                   questoes={questoes}
                   respostas={respostas}
                   resultados={resultados}
                   simuladoFinalizado={simuladoFinalizado}
                   paginaAtual={paginaAtual}
-                  itensPorPagina={itensPorPagina}
-                  onIrParaQuestao={handleIrParaQuestao}
+                  itensPorPagina={ITENS_POR_PAGINA}
+                  onIrParaQuestao={irParaQuestao}
                   onFinalizar={finalizarSimulado}
                   finalizando={finalizando}
                 />
               </div>
             ) : gerando ? (
-              <div className="bg-white dark:bg-gray-800 p-8 md:p-12 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-900/40 text-center w-full flex flex-col items-center justify-center min-h-[420px]">
-                <div className="relative mb-6">
-                  <div className="w-16 h-16 rounded-full border-4 border-blue-100 dark:border-blue-900/50 border-t-blue-600 animate-spin" />
-                  <div className="absolute inset-0 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                    <Sparkles size={24} className="animate-pulse" />
-                  </div>
-                </div>
-
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                  {modoCriacao === "material"
-                    ? "Gerando Simulado a partir do seu Material"
-                    : "Criando seu Simulado com IA"}
-                </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mb-6">
-                  {modoCriacao === "material"
-                    ? "A IA está lendo o conteúdo dos seus arquivos para criar questões fiéis à sua matéria."
-                    : "Selecionando e organizando os melhores tópicos para o seu estudo."}
-                </p>
-
-                {/* Etapas animadas */}
-                <div className="max-w-md w-full space-y-3 text-left">
-                  <div
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                      etapaGeracao >= 0
-                        ? "bg-blue-50/80 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300"
-                        : "opacity-40 border-gray-200 dark:border-gray-700 text-gray-400"
-                    }`}
-                  >
-                    <FileText
-                      size={20}
-                      className={etapaGeracao === 0 ? "animate-bounce" : ""}
-                    />
-                    <div className="flex-1 text-xs md:text-sm font-medium">
-                      1. Lendo e processando arquivos e slides...
-                    </div>
-                    {etapaGeracao > 0 && (
-                      <CheckCircle2
-                        size={18}
-                        className="text-green-500 shrink-0"
-                      />
-                    )}
-                  </div>
-
-                  <div
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                      etapaGeracao >= 1
-                        ? "bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300"
-                        : "opacity-40 border-gray-200 dark:border-gray-700 text-gray-400"
-                    }`}
-                  >
-                    <BookOpen
-                      size={20}
-                      className={etapaGeracao === 1 ? "animate-bounce" : ""}
-                    />
-                    <div className="flex-1 text-xs md:text-sm font-medium">
-                      2. Mapeando conceitos, definições e diagramas-chave...
-                    </div>
-                    {etapaGeracao > 1 && (
-                      <CheckCircle2
-                        size={18}
-                        className="text-green-500 shrink-0"
-                      />
-                    )}
-                  </div>
-
-                  <div
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                      etapaGeracao >= 2
-                        ? "bg-purple-50/80 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300"
-                        : "opacity-40 border-gray-200 dark:border-gray-700 text-gray-400"
-                    }`}
-                  >
-                    <Sparkles
-                      size={20}
-                      className={etapaGeracao === 2 ? "animate-spin" : ""}
-                    />
-                    <div className="flex-1 text-xs md:text-sm font-medium">
-                      3. Formulando questões inéditas e explicações...
-                    </div>
-                  </div>
-                </div>
-
-                <p className="text-xs text-gray-400 mt-6">
-                  Leitura e geração ultra-rápidas nas TPUs do Gemini.
-                </p>
-              </div>
+              <EsperaIA
+                titulo={modoCriacao === "material" ? "Criando questões a partir do seu material" : "Criando seu simulado com IA"}
+                descricao={
+                  modoCriacao === "material"
+                    ? "A IA está lendo seus arquivos para criar questões fiéis ao conteúdo."
+                    : `Buscando questões no banco e criando as que faltarem (${quantidade} no total).`
+                }
+                segundosMedios={tempoGeracao?.amostras ? tempoGeracao.segundos : null}
+                segundosPadrao={modoCriacao === "material" ? 30 : 20}
+              />
             ) : (
-              <div className="bg-white dark:bg-gray-800 p-12 text-center rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 text-gray-500 dark:text-gray-400 w-full flex flex-col items-center justify-center min-h-[400px]">
-                <div className="p-4 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-4">
-                  {modoCriacao === "material" ? (
-                    <Paperclip size={32} />
-                  ) : (
-                    <BookOpen size={32} />
-                  )}
+              <div className="bg-white dark:bg-gray-800 p-8 sm:p-12 text-center rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 w-full flex flex-col items-center justify-center min-h-[400px]">
+                <div className="p-4 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-4" aria-hidden="true">
+                  {modoCriacao === "material" ? <Paperclip size={32} /> : <BookOpen size={32} />}
                 </div>
-                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-200 mb-2">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">
+                  {modoCriacao === "material" ? "Pronto para estudar seus slides ou anotações?" : "Pronto para começar?"}
+                </h2>
+                <p className="text-sm max-w-md text-gray-600 dark:text-gray-400">
                   {modoCriacao === "material"
-                    ? "Pronto para estudar seus slides ou anotações?"
-                    : "Pronto para iniciar seu simulado?"}
-                </h3>
-                <p className="text-sm max-w-md text-gray-500 dark:text-gray-400 mb-6">
-                  {modoCriacao === "material"
-                    ? "Faça upload de até 5 PDFs de aula (slides, apostilas ou resumos) na barra lateral e clique em 'Gerar a partir do Material'."
-                    : "Escolha a matéria, nível e tópicos na barra lateral e clique em 'Gerar Simulado' para começar seus estudos."}
+                    ? "Envie até 5 arquivos de aula (slides, apostilas ou resumos) no painel e clique em “Gerar a partir do material”."
+                    : "Escolha o nível, a matéria e os tópicos no painel e clique em “Gerar simulado”."}
                 </p>
+                {focusMode && (
+                  <button
+                    type="button"
+                    onClick={() => setFocusMode(false)}
+                    className="mt-5 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                  >
+                    Mostrar painel de configuração
+                  </button>
+                )}
               </div>
             )}
           </div>
-        </div>
+        </main>
       </div>
 
+      <DialogoConfirmacao
+        aberto={confirmandoNovo}
+        titulo="Descartar este simulado?"
+        descricao={
+          simuladoFinalizado
+            ? "O resultado continua salvo em “Meu desempenho”. Você poderá configurar um novo simulado."
+            : "As respostas deste simulado ainda não foram enviadas e serão perdidas."
+        }
+        textoConfirmar="Descartar e criar novo"
+        perigo={!simuladoFinalizado}
+        onConfirmar={descartarSimulado}
+        onCancelar={() => setConfirmandoNovo(false)}
+      />
+
       <div style={{ display: "none" }}>
-        <SimuladoParaImprimir
-          ref={printRef}
-          questoes={questoes}
-          alunoNome={user?.displayName || ""}
-          materia={
-            modoMateria === "Única"
-              ? materiaUnica
-              : materiasMultiplas.join(", ")
-          }
-        />
+        <SimuladoParaImprimir ref={printRef} questoes={questoes} alunoNome={user?.displayName || ""} materia={tituloCaderno} />
       </div>
     </div>
   );
