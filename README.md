@@ -1,121 +1,165 @@
 <div align="center">
-  <img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-blue?style=for-the-badge" alt="Status" />
+  <img src="https://img.shields.io/badge/Status-Em%20produ%C3%A7%C3%A3o-brightgreen?style=for-the-badge" alt="Status: em produção" />
   <br>
   <h1>🌟 Plataforma Lumen</h1>
-  <p><strong>A Revolução nos Estudos Guiada por Inteligência Artificial</strong></p>
+  <p><strong>Simulados personalizados e correção detalhada com Inteligência Artificial</strong></p>
+  <p><a href="https://lumenm.web.app">lumenm.web.app</a></p>
 </div>
 
 ---
 
-A **Lumen** é uma plataforma educacional inovadora que permite aos estudantes criar baterias de exercícios e simulados totalmente personalizados, combinando um robusto banco de dados de provas oficiais com o poder de geração e correção da inteligência artificial (Google Gemini).
+A **Lumen** é uma plataforma de estudos em que o aluno monta simulados sob medida — por nível, matéria e tópico, ou a partir do próprio material de aula — e recebe a correção de cada questão, inclusive das discursivas. Um banco de questões (oficiais e geradas) é combinado com a geração e a correção do Google Gemini.
 
-## 🚀 Principais Funcionalidades
+## 🚀 Funcionalidades
 
-- 🧠 **Geração Inteligente de Questões:** Escolha a matéria, tópico e nível escolar. Se a plataforma não encontrar questões suficientes no banco de dados, a IA cria questões inéditas (múltipla escolha ou discursivas) instantaneamente, calibradas para a dificuldade escolhida.
-- 📝 **Correção de Discursivas em Lote:** Chega de esperar o professor corrigir. Finalize seu simulado e deixe a IA analisar suas respostas dissertativas segundo o gabarito, dando notas (de 0 a 100) e feedbacks pedagógicos detalhados do que você acertou e onde errou.
-- 🎯 **Filtro de Provas Oficiais:** Prefere estudar com as provas reais? Marque o filtro e o sistema priorizará questões originais de bancas como ENEM, FUVEST, Unicamp, etc., usando a IA apenas para completar a bateria caso necessário.
-- 📊 **Dashboard & Histórico de Desempenho:** Acompanhe suas notas gerais. Suas baterias de exercícios ficam salvas automaticamente, permitindo consultar resoluções passadas a qualquer momento.
-- 📄 **Exportação em PDF:** Gostou do simulado gerado? Exporte-o para um PDF limpo e diagramado para imprimir e resolver no papel!
-- 🌓 **Modo Escuro (Dark Mode):** Interface moderna e limpa, com botão interativo para alternar para o modo noturno com proteção visual.
+- 🧠 **Simulados por matéria:** do Ensino Fundamental ao Ensino Superior. O sistema usa primeiro o banco de questões (priorizando as que o aluno ainda não respondeu) e a IA cria as que faltarem.
+- 📎 **Simulados a partir do seu material:** envie até 5 arquivos (PDF, TXT ou MD) ou cole suas anotações; a IA cria questões fiéis ao conteúdo. Essas questões são **privadas** e não entram no banco público.
+- 🎯 **Questões oficiais:** opção de priorizar questões reais de ENEM, FUVEST, UNICAMP e outras bancas.
+- 📝 **Correção no servidor:** múltipla escolha conferida com o gabarito do banco e discursivas corrigidas pela IA, com nota de 0 a 100, comentário e resposta esperada.
+- ⏱️ **Tempo médio na tela:** durante a geração e a correção, o aluno vê o tempo médio real (medido no servidor), o tempo decorrido e uma barra de progresso.
+- 📊 **Desempenho:** média geral, domínio por matéria (gráfico), histórico de simulados com os comentários de cada correção e opção de refazer.
+- 📄 **Exportar PDF:** a prova sai diagramada para imprimir, com linhas para as discursivas e folha de gabarito quando o simulado já foi corrigido.
+- 🌓 **Modo escuro** que segue o sistema na primeira visita e lembra a escolha do aluno.
+- ♿ **Acessibilidade:** navegação por teclado, leitores de tela, contraste WCAG AA e respeito a "reduzir movimento".
 
----
+## 🏗️ Arquitetura
 
-## 🛠️ Tecnologias Utilizadas
+```mermaid
+flowchart LR
+  A["Navegador do aluno"] -->|"site estático"| B["Firebase Hosting (CDN)"]
+  A -->|"login"| C["Firebase Auth"]
+  A -->|"API REST + token"| D["Backend Express<br/>Google Cloud Run"]
+  D -->|"verifica o token"| C
+  D --> E[("PostgreSQL<br/>Neon")]
+  D -->|"gera e corrige"| F["Google Gemini"]
+```
 
-A Lumen é um projeto Fullstack moderno, separado em duas camadas:
+- **Frontend:** Next.js exportado como site estático (`output: "export"`) e servido pela CDN do Firebase Hosting — sem servidor para "acordar".
+- **Backend:** API Express em container no Google Cloud Run. Cada requisição é autenticada com o token do Firebase; o gabarito nunca vai para o navegador antes da correção.
+- **Banco:** PostgreSQL no Neon, com migrações versionadas aplicadas automaticamente quando o servidor sobe.
+- **IA:** Gemini, com os modelos "lite" (mais rápidos e estáveis) primeiro e modelos reserva. Detalhes em [Como a IA é usada](#-como-a-ia-é-usada).
 
-### Frontend (Interface do Aluno)
-- **Next.js (React)** - Framework para renderização rápida e roteamento inteligente.
-- **Tailwind CSS v4** - Estilização utilitária de ponta, incluindo esquemas de cores adaptáveis.
-- **Lucide Icons** - Ícones minimalistas.
-- **Firebase Auth** - Sistema seguro de autenticação (Email/Senha e Google Login).
+## 🛠️ Tecnologias
 
-### Backend (API e Banco de Dados)
-- **Node.js + Express** - Servidor robusto para rotear a lógica de correção.
-- **PostgreSQL** - Banco de dados relacional para armazenar questões oficiais e o histórico dos alunos.
-- **Google Gemini API (`@google/genai`)** - O cérebro por trás da geração de conteúdo e correção rigorosa das questões. Modelos: `gemini-3.6-flash`.
+| Camada | Tecnologias |
+|---|---|
+| Frontend | Next.js 16 (React 19), Tailwind CSS v4, Firebase Auth, Recharts, Lucide |
+| Backend | Node.js 24, Express 5, `@google/genai`, `pg`, Helmet, express-rate-limit, Multer |
+| Dados | PostgreSQL (Neon) com `pg_trgm` |
+| Infraestrutura | Firebase Hosting, Google Cloud Run, Secret Manager, Artifact Registry |
 
----
+## 🤖 Como a IA é usada
 
-## 💻 Como Rodar o Projeto Localmente
+- **Modelos em cadeia com reserva em paralelo:** começa pelo modelo principal; se ele falhar, o próximo é chamado na hora; se só demorar, o reserva começa **em paralelo** e vale a primeira resposta válida. Modelos que falharam há pouco saem da frente por um tempo. Assim, uma sobrecarga do Gemini não faz o aluno esperar.
+- **Geração em lotes paralelos:** 20 questões viram 4 lotes de 5 gerados ao mesmo tempo, cada um com um foco diferente, e questões repetidas são descartadas.
+- **Formato garantido:** a resposta é pedida em JSON com schema (`responseSchema`) e validada no servidor (ex.: exatamente uma alternativa correta).
+- **Correção resistente a manipulação:** a resposta do aluno vai delimitada no prompt e a nota é sempre limitada a 0–100.
+- **Métricas:** cada geração e correção registra o tempo real, e a mediana recente aparece para o aluno.
 
-Se você deseja contribuir ou rodar a Lumen na sua própria máquina, siga os passos abaixo:
+Os modelos e prazos ficam em [`backend/src/config.js`](backend/src/config.js) e podem ser trocados por variável de ambiente.
 
-### 1. Pré-requisitos
-- Node.js instalado (v18 ou superior)
-- Git instalado
-- Uma conta no [Firebase](https://console.firebase.google.com/) (Para autenticação)
-- Uma [API Key do Google Gemini AI](https://aistudio.google.com/)
-- Banco de Dados PostgreSQL (Local ou em nuvem como Supabase/Render)
+## 📁 Estrutura
 
-### 2. Configurando o Backend
-1. Entre na pasta do backend:
-   ```bash
-   cd backend
-   ```
-2. Instale as dependências:
-   ```bash
-   npm install
-   ```
-3. Copie `backend/.env.example` para `backend/.env` e preencha (Gemini e Banco de Dados).
-4. Suba um Postgres local (usa as credenciais do `.env`, acessível só em `localhost`):
-   ```bash
-   docker compose up -d
-   ```
-5. Inicie o servidor:
-   ```bash
-   npm run dev
-   ```
-   > *Nota: a cada inicialização o servidor aplica as migrações pendentes (`src/db/migrate.js`) antes de aceitar requisições. Para rodar manualmente: `npm run migrate`. Nunca edite uma migração já aplicada; crie uma nova no fim da lista.*
+```
+lumen/
+├── backend/
+│   ├── src/
+│   │   ├── api/routes/        # simulado, desempenho, correção
+│   │   ├── api/middlewares/   # autenticação, limites de uso, upload, erros
+│   │   ├── core/              # Firebase Admin e cliente do Gemini
+│   │   ├── db/                # conexão e migrações versionadas
+│   │   ├── services/          # prompts, questões, correção, métricas
+│   │   ├── app.js             # aplicação Express
+│   │   └── index.js           # migra o banco e sobe o servidor
+│   ├── Dockerfile
+│   └── docker-compose.yml     # Postgres para desenvolvimento
+└── frontend/
+    └── src/
+        ├── app/               # páginas: login, cadastro, início, simulado, desempenho
+        ├── components/        # interface (inclui componentes de acessibilidade)
+        └── lib/               # cliente da API, tipos, Firebase
+```
 
-### 3. Configurando o Frontend
-1. Entre na pasta do frontend:
-   ```bash
-   cd frontend
-   ```
-2. Instale as dependências:
-   ```bash
-   npm install
-   ```
-3. Crie um arquivo `.env.local` conectando sua API e seu Firebase:
-   ```env
-   NEXT_PUBLIC_API_URL=http://localhost:3001/api
-   NEXT_PUBLIC_FIREBASE_API_KEY=sua_chave_firebase
-   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=seu_projeto.firebaseapp.com
-   NEXT_PUBLIC_FIREBASE_PROJECT_ID=seu_projeto
-   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=seu_projeto.appspot.com
-   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=seu_id
-   NEXT_PUBLIC_FIREBASE_APP_ID=seu_app_id
-   ```
-4. Inicie a interface:
-   ```bash
-   npm run dev
-   ```
+## 💻 Rodando localmente
 
-A plataforma estará disponível em `http://localhost:3000`! 🎉
+**Pré-requisitos:** Node.js 20 ou superior, Docker (para o Postgres local), um projeto no [Firebase](https://console.firebase.google.com/) com login por e-mail/Google e uma [chave do Gemini](https://aistudio.google.com/apikey).
 
----
+### Backend
+
+```bash
+cd backend
+npm install
+cp .env.example .env        # preencha as variáveis (veja a tabela abaixo)
+docker compose up -d        # Postgres local, acessível só em localhost
+npm run dev                 # http://localhost:3001
+```
+
+O servidor aplica as migrações pendentes antes de aceitar requisições (também dá para rodar `npm run migrate`). Nunca edite uma migração já aplicada: crie uma nova no fim da lista em [`backend/src/db/migrate.js`](backend/src/db/migrate.js).
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+# crie frontend/.env.local (veja a tabela abaixo)
+npm run dev                 # http://localhost:3000
+```
+
+### Variáveis de ambiente
+
+**Backend** (`backend/.env`):
+
+| Variável | Descrição |
+|---|---|
+| `DATABASE_URL` | Conexão do Postgres (em produção). Localmente dá para usar `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` e `DB_NAME`. |
+| `DB_SSL` | `disable`, `require` ou `verify` (opcional). |
+| `GEMINI_API_KEY` | Chave da API do Gemini. |
+| `FIREBASE_PROJECT_ID` | Projeto do Firebase usado para validar os tokens de login. |
+| `CORS_ORIGINS` | Domínios do frontend autorizados, separados por vírgula (em desenvolvimento, `localhost:3000` já é liberado). |
+| `LIMITE_GERACOES_HORA`, `LIMITE_GERACOES_DIA`, `LIMITE_CORRECOES_HORA`, `LIMITE_REQUISICOES_IP` | Limites de uso por conta e por IP (opcionais). |
+| `GEMINI_MODELOS_GERACAO`, `GEMINI_MODELOS_CORRECAO` | Cadeia de modelos, separados por vírgula (opcionais). |
+
+**Frontend** (`frontend/.env.local`):
+
+| Variável | Descrição |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | URL da API, terminando em `/api` (ex.: `http://localhost:3001/api`). |
+| `NEXT_PUBLIC_FIREBASE_API_KEY`, `..._AUTH_DOMAIN`, `..._PROJECT_ID`, `..._STORAGE_BUCKET`, `..._MESSAGING_SENDER_ID`, `..._APP_ID` | Configuração web do Firebase. |
+| `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR` | Opcional: URL do emulador de login (ex.: `http://127.0.0.1:9099`) para testar sem contas reais. |
 
 ## 🚢 Deploy
 
-- **Backend (Google Cloud Run, projeto `lumenm-api`, região `us-east1`) + banco no [Neon](https://neon.com):** a imagem é gerada pelo `backend/Dockerfile`. `DATABASE_URL` e `GEMINI_API_KEY` ficam no Secret Manager (`lumen-database-url`, `lumen-gemini-api-key`) e o serviço roda com a conta `lumen-backend@lumenm-api.iam.gserviceaccount.com`, que só acessa esses segredos. A configuração é mantida entre deploys. Para publicar uma nova versão (no PowerShell, use `gcloud.cmd` ao chamar o gcloud diretamente):
-  ```bash
-  cd backend
-  npm run deploy
-  ```
-  - URL da API: `https://lumen-backend-36404012863.us-east1.run.app` (o frontend usa `NEXT_PUBLIC_API_URL=<url>/api`).
-  - A cobrança fica **só** no projeto `lumenm-api`. O projeto `lumenm` (Firebase e chave do Gemini) fica **sem** cobrança, para o Gemini continuar no nível gratuito.
-  - Use a conexão **direta** do Neon (sem `-pooler` no host) com `?sslmode=verify-full`: as migrações usam advisory locks, que não funcionam através do PgBouncer.
-- **Frontend (Firebase Hosting):** o Next.js gera um site estático (`output: "export"`), servido direto pela CDN. Para publicar:
-  ```bash
-  cd frontend
-  npm run deploy
-  ```
+**Backend — Google Cloud Run** (projeto `lumenm-api`, região `us-east1`):
+
+```bash
+cd backend
+npm run deploy
+```
+
+- A imagem é gerada pelo `Dockerfile`; o `.gcloudignore` impede que `.env` e chaves sejam enviados.
+- `DATABASE_URL` e `GEMINI_API_KEY` ficam no Secret Manager (`lumen-database-url` e `lumen-gemini-api-key`), e o serviço roda com uma conta de serviço que só acessa esses segredos. A configuração é mantida entre deploys.
+- A cobrança fica só no projeto `lumenm-api`; o projeto do Firebase fica sem cobrança, para a chave do Gemini continuar no nível gratuito.
+- Use a conexão **direta** do Neon (sem `-pooler` no host) com `?sslmode=verify-full`: as migrações usam advisory locks, que não funcionam através do PgBouncer.
+- No PowerShell, chame o gcloud como `gcloud.cmd`.
+
+**Frontend — Firebase Hosting:**
+
+```bash
+cd frontend
+npm run deploy              # next build + firebase deploy --only hosting
+```
+
+Os cabeçalhos de segurança (CSP, proteção contra framing, cache) estão em [`frontend/firebase.json`](frontend/firebase.json).
 
 ## 🔒 Segurança
 
-- A correção é feita **no servidor**: durante a prova o navegador recebe as questões sem gabarito, e a nota é calculada com os dados do banco.
-- Questões geradas a partir do material do aluno (PDFs/anotações) são **privadas** e nunca entram no banco público.
-- As rotas de IA têm limite de uso por conta e por IP (configurável por variáveis `LIMITE_*`).
-- Nunca faça commit de `.env` nem de arquivos de service account. O backend não precisa de service account: só o `FIREBASE_PROJECT_ID`.
+- **Gabarito protegido:** durante a prova o navegador recebe as questões sem gabarito; a nota é calculada no servidor com os dados do banco.
+- **Material privado:** questões criadas a partir do material do aluno nunca entram no banco público.
+- **Limites de uso** da IA por conta e por IP, persistidos no Postgres.
+- **Entrada validada:** tamanho, tipo e assinatura dos arquivos, listas fechadas de opções e erros internos que nunca chegam ao navegador.
+- **Cabeçalhos de segurança** (Helmet no backend, CSP no hosting), CORS restrito e senhas só no Secret Manager.
+- Nunca faça commit de `.env` nem de arquivos de service account: o backend só precisa do `FIREBASE_PROJECT_ID`.
 
+## ♿ Acessibilidade
+
+A interface foi auditada com [axe-core](https://github.com/dequelabs/axe-core) (WCAG 2.1 AA) nas telas principais, em modo claro, escuro e no celular: rótulos ligados aos campos, nomes em botões de ícone, modais com `<dialog>`, avisos anunciados por leitores de tela, feedback de acerto/erro que não depende só de cor e foco sempre visível.
